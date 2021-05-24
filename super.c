@@ -42,6 +42,7 @@
 #include "journal.h"
 #include "super.h"
 #include "inode.h"
+#include "entry.h"
 
 int measure_timing;
 int metadata_csum;
@@ -396,12 +397,29 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	struct nova_sb_info *sbi = NOVA_SB(sb);
 	struct nova_inode_update update;
 	u64 epoch_id;
+	int retval;
 	INIT_TIMING(init_time);
 
 	NOVA_START_TIMING(new_init_t, init_time);
 	nova_info("creating an empty nova of size %lu\n", size);
 	sbi->num_blocks = ((unsigned long)(size) >> PAGE_SHIFT);
 
+	/*
+	* Author:Hsiao
+	* Reserve space for deduplication metadata entry
+	*/
+	sbi->metadata_start = sbi->head_reserved_blocks;
+	sbi->head_reserved_blocks += ( (sbi->num_blocks * sizeof(struct nova_pmm_entry) ) >> PAGE_SHIFT ) + 1;
+
+	nova_dbg("sbi->num_blocks:%lu metadata_start:%lu head_reserved_blocks:%lu",sbi->num_blocks,sbi->metadata_start,sbi->head_reserved_blocks);
+
+	/**
+	 * INIT_METADATA_FREELIST
+	 **/
+	retval = nova_init_entry_list(sb);
+	if(retval < 0)
+		return ERR_PTR(retval);
+	
 	nova_dbgv("nova: Default block size set to 4K\n");
 	sbi->blocksize = blocksize = NOVA_DEF_BLOCK_SIZE_4K;
 	nova_set_blocksize(sb, sbi->blocksize);
@@ -830,6 +848,12 @@ out:
 	kfree(sbi->inode_maps);
 	sbi->inode_maps = NULL;
 
+	/*
+	* Author:Hsiao
+	* free entry free list
+	*/
+	nova_free_entry_list(sb);
+
 	nova_sysfs_exit(sb);
 
 	kfree(sbi->nova_sb);
@@ -1237,7 +1261,7 @@ static int __init init_nova_fs(void)
 	rc = register_filesystem(&nova_fs_type);
 	if (rc)
 		goto out3;
-
+	
 	NOVA_END_TIMING(init_t, init_time);
 	return 0;
 
