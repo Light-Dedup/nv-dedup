@@ -1,5 +1,6 @@
 #ifndef __SUPER_H
 #define __SUPER_H
+#include "fingerprint.h"
 /*
  * Structure of the NOVA super block in PMEM
  *
@@ -174,6 +175,8 @@ struct nova_sb_info {
 	/* Per-CPU free block list */
 	struct free_list *free_lists;
 	unsigned long per_list_blocks;
+	struct nova_fp_hash_ctx nova_fp_strong_ctx;
+	struct nova_fp_hash_ctx nova_fp_weak_ctx;
 };
 
 static inline struct nova_sb_info *NOVA_SB(struct super_block *sb)

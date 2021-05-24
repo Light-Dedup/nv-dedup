@@ -455,6 +455,14 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	sbi->nova_sb->s_data_parity = data_parity;
 	nova_update_super_crc(sb);
 
+	if( nova_fp_strong_ctx_init(&sbi->nova_fp_strong_ctx) < 0 ) {
+		nova_warn("strong fp init failed");
+	}
+
+	if( nova_fp_weak_ctx_init(&sbi->nova_fp_weak_ctx) < 0 ) {
+		nova_warn("weak fp init failed");
+	}
+
 	nova_sync_super(sb);
 
 	root_i = nova_get_inode_by_ino(sb, NOVA_ROOT_INO);
@@ -479,7 +487,6 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	epoch_id = nova_get_epoch_id(sb);
 	nova_append_dir_init_entries(sb, root_i, NOVA_ROOT_INO,
 					NOVA_ROOT_INO, epoch_id);
-
 	PERSISTENT_MARK();
 	PERSISTENT_BARRIER();
 	NOVA_END_TIMING(new_init_t, init_time);
@@ -920,6 +927,8 @@ static void nova_put_super(struct super_block *sb)
 
 	nova_print_curr_epoch_id(sb);
 
+	nova_fp_hash_ctx_free(&sbi->nova_fp_strong_ctx);
+	nova_fp_hash_ctx_free(&sbi->nova_fp_weak_ctx);
 	/* It's unmount time, so unmap the nova memory */
 //	nova_print_free_lists(sb);
 	if (sbi->virt_addr) {
