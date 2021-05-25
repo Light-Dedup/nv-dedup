@@ -78,6 +78,7 @@ static const struct export_operations nova_export_ops;
 static struct kmem_cache *nova_inode_cachep;
 static struct kmem_cache *nova_range_node_cachep;
 static struct kmem_cache *nova_snapshot_info_cachep;
+static struct kmem_cache *nova_data_buffer_cachep;
 
 /* FIXME: should the following variable be one per NOVA instance? */
 unsigned int nova_dbgmask;
@@ -1023,6 +1024,19 @@ void nova_free_snapshot_info(struct snapshot_info *info)
 	kmem_cache_free(nova_snapshot_info_cachep, info);
 }
 
+char *nova_alloc_data_buffer(struct super_block *sb)
+{
+	char *page;
+
+	page = kmem_cache_zalloc(nova_data_buffer_cachep,GFP_KERNEL);
+	return page;
+}
+
+void nova_free_data_buffer(char *page)
+{
+	kmem_cache_free(nova_data_buffer_cachep, page);
+}
+
 struct nova_range_node *nova_alloc_range_node_atomic(struct super_block *sb)
 {
 	struct nova_range_node *p;
@@ -1117,6 +1131,16 @@ static int __init init_snapshot_info_cache(void)
 	return 0;
 }
 
+static int __init init_page_cache(void)
+{
+	nova_data_buffer_cachep = kmem_cache_create_usercopy(
+		"nova_page_cache", PAGE_SIZE, 8, 0, 0, PAGE_SIZE, NULL
+	);
+	if(nova_data_buffer_cachep == NULL)
+		return -ENOMEM;
+	return 0;
+}
+
 static int __init init_inodecache(void)
 {
 	nova_inode_cachep = kmem_cache_create("nova_inode_cache",
@@ -1146,6 +1170,11 @@ static void destroy_rangenode_cache(void)
 static void destroy_snapshot_info_cache(void)
 {
 	kmem_cache_destroy(nova_snapshot_info_cachep);
+}
+
+static void destroy_page_cache(void)
+{
+	kmem_cache_destroy(nova_data_buffer_cachep);
 }
 
 /*
@@ -1261,10 +1290,15 @@ static int __init init_nova_fs(void)
 	rc = register_filesystem(&nova_fs_type);
 	if (rc)
 		goto out3;
+
+	rc = init_page_cache();
+	if(rc)
+		goto out4;
 	
 	NOVA_END_TIMING(init_t, init_time);
 	return 0;
-
+out4:
+	destroy_page_cache();
 out3:
 	destroy_snapshot_info_cache();
 out2:
@@ -1278,6 +1312,7 @@ static void __exit exit_nova_fs(void)
 {
 	unregister_filesystem(&nova_fs_type);
 	remove_proc_entry(proc_dirname, NULL);
+	destroy_page_cache();
 	destroy_snapshot_info_cache();
 	destroy_inodecache();
 	destroy_rangenode_cache();

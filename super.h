@@ -221,5 +221,12 @@ extern void nova_free_range_node(struct nova_range_node *node);
 extern void nova_update_super_crc(struct super_block *sb);
 extern void nova_sync_super(struct super_block *sb);
 
+/*
+* Author: Hsiao
+* Alloc and free data buffer for data page
+*/
+extern char *nova_alloc_data_buffer(struct super_block *sb);
+extern void nova_free_data_buffer(char *page);
+
 struct snapshot_info *nova_alloc_snapshot_info(struct super_block *sb);
 #endif

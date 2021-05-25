@@ -22,6 +22,7 @@
 #include <asm/mman.h>
 #include "nova.h"
 #include "inode.h"
+#include "entry.h"
 
 
 static inline int nova_can_set_blocksize_hint(struct inode *inode,
@@ -624,6 +625,7 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 	struct nova_inode_info *si = NOVA_I(inode);
 	struct nova_inode_info_header *sih = &si->header;
 	struct super_block *sb = inode->i_sb;
+    struct nova_sb_info *sbi = NOVA_SB(sb);
 	struct nova_inode *pi, inode_copy;
 	struct nova_file_write_entry entry_data;
 	struct nova_inode_update update;
@@ -647,6 +649,9 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 	int try_inplace = 0;
 	u64 epoch_id;
 	u32 time;
+	char* data_buffer;
+
+	data_buffer = nova_alloc_data_buffer(sb);
 
 
 	if (len == 0)
@@ -740,6 +745,11 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 		}
 		/* Now copy from user buf */
 		//		nova_dbg("Write: %p\n", kmem);
+		if( copy_from_user(data_buffer + offset, buf, bytes) ) {
+			ret = -EFAULT;
+			goto out;
+		}
+		
 		NOVA_START_TIMING(memcpy_w_nvmm_t, memcpy_time);
 		nova_memunlock_range(sb, kmem + offset, bytes);
 		copied = bytes - memcpy_to_pmem_nocache(kmem + offset,
@@ -819,6 +829,8 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 
 	sih->trans_id++;
 out:
+	if(data_buffer)
+		nova_free_data_buffer(data_buffer);
 	if (ret < 0)
 		nova_cleanup_incomplete_write(sb, sih, blocknr, allocated,
 						begin_tail, update.tail);
