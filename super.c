@@ -399,6 +399,7 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	struct nova_inode_update update;
 	u64 epoch_id;
 	int retval;
+	size_t sz;
 	INIT_TIMING(init_time);
 
 	NOVA_START_TIMING(new_init_t, init_time);
@@ -410,10 +411,23 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	* Reserve space for deduplication metadata entry
 	*/
 	sbi->metadata_start = sbi->head_reserved_blocks;
-	sbi->head_reserved_blocks += ( (sbi->num_blocks * sizeof(struct nova_pmm_entry) ) >> PAGE_SHIFT ) + 1;
+	sbi->num_entries_blocks = ( ( sbi->num_blocks * sizeof(struct nova_pmm_entry) ) >> PAGE_SHIFT ) + 1 ;
+	sbi->head_reserved_blocks += sbi->num_entries;
 
-	nova_dbg("sbi->num_blocks:%lu metadata_start:%lu head_reserved_blocks:%lu",sbi->num_blocks,sbi->metadata_start,sbi->head_reserved_blocks);
+	// nova_dbg("sbi->num_blocks:%lu metadata_start:%lu num_entries_block:%lu head_reserved_blocks:%lu",sbi->num_blocks, sbi->metadata_start, sbi->num_entries_blocks, sbi->head_reserved_blocks);
 
+	/**
+	 * INIT_HASH_TABLE
+	 **/
+	sbi->num_entries = ( sbi->num_entries_blocks << PAGE_SHIFT ) / sizeof(struct nova_pmm_entry) ;
+	sbi->num_entries_bits = 32 - __builtin_clz(sbi->num_entries);
+	sz = 1 << sbi->num_entries_bits;
+	sbi->weak_hash_table = vzalloc(sizeof(u64) * sz);
+	sbi->strong_hash_table = vzalloc(sizeof(u64) * sz);
+	sbi->blocknr_to_entry = vzalloc(sizeof(u64) * sz);
+	memset(sbi->blocknr_to_entry, -1, sizeof(*sbi->blocknr_to_entry));
+	// nova_dbg("sbi->num_entries:%lu sbi->num_entries_bits:%lu",sbi->num_entries,sbi->num_entries_bits);
+	
 	/**
 	 * INIT_METADATA_FREELIST
 	 **/
@@ -954,6 +968,11 @@ static void nova_put_super(struct super_block *sb)
 
 	nova_fp_hash_ctx_free(&sbi->nova_fp_strong_ctx);
 	nova_fp_hash_ctx_free(&sbi->nova_fp_weak_ctx);
+	nova_free_entry_list(sb);
+	vfree(sbi->weak_hash_table);
+	vfree(sbi->strong_hash_table);
+	vfree(sbi->blocknr_to_entry);
+
 	/* It's unmount time, so unmap the nova memory */
 //	nova_print_free_lists(sb);
 	if (sbi->virt_addr) {
