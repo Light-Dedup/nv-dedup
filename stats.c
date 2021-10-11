@@ -159,6 +159,12 @@ const char *Timingstring[TIMING_NUM] = {
 	"delete_snapshot",
 	"append_snapshot_filedata",
 	"append_snapshot_inode",
+
+	/* NV-Dedup */
+	"================== NV-Dedup ===================",
+	"strong_fingerprint_calculation",
+	"weak_fingerprint_calculation",
+	"hash_table_find",
 };
 
 u64 Timingstats[TIMING_NUM];

@@ -163,6 +163,12 @@ enum timing_category {
 	append_snapshot_file_t,
 	append_snapshot_inode_t,
 
+	/* NV-Dedup */
+	nv_dedup_title_t,
+	strong_fp_calc_t,
+	weak_fp_calc_t,
+	hash_table_t,
+
 	/* Sentinel */
 	TIMING_NUM,
 };

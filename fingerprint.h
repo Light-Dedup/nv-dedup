@@ -60,16 +60,13 @@ static inline int nova_fp_strong_calc(struct nova_fp_hash_ctx *fp_ctx, const voi
 {
 	struct shash_desc *shash_desc;
 	int ret;
-	// INIT_TIMING(fp_calc_time);
 
 	shash_desc = kmalloc(sizeof(struct shash_desc) +
 		crypto_shash_descsize(fp_ctx->alg), GFP_KERNEL);
 	if (shash_desc == NULL)
 		return -ENOMEM;
 	shash_desc->tfm = fp_ctx->alg;
-	// NOVA_START_TIMING(fp_calc_t, fp_calc_time);
 	ret = crypto_shash_digest(shash_desc, (const void*)addr, 4096, (void*)fp->u64s);
-	// NOVA_END_TIMING(fp_calc_t, fp_calc_time);
 	kfree(shash_desc);
 
 	return ret;
@@ -79,16 +76,13 @@ static inline int nova_fp_weak_calc(struct nova_fp_hash_ctx *fp_ctx, const void 
 {
 	struct shash_desc *shash_desc;
 	int ret;
-	// INIT_TIMING(fp_calc_time);
 
 	shash_desc = kmalloc(sizeof(struct shash_desc) +
 		crypto_shash_descsize(fp_ctx->alg), GFP_KERNEL);
 	if (shash_desc == NULL)
 		return -ENOMEM;
 	shash_desc->tfm = fp_ctx->alg;
-	// NOVA_START_TIMING(fp_calc_t, fp_calc_time);
 	ret = crypto_shash_digest(shash_desc, (const void*)addr, 4096, (void*)&fp->u32);
-	// NOVA_END_TIMING(fp_calc_t, fp_calc_time);
 	kfree(shash_desc);
 
 	return ret;

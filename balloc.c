@@ -426,7 +426,7 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 	if(num_blocks == 1) {
 		pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
 		to_be_free_idx = sbi->blocknr_to_entry[block_low];
-		if(to_be_free_idx != 0) {
+		if(to_be_free_idx >= 0) {
 			pentry = pentries + to_be_free_idx;
 			--pentry->refcount;
 			if(pentry->refcount != 0) {
@@ -434,7 +434,7 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 				ret = 0;
 				goto out;
 			}
-			sbi->blocknr_to_entry[block_low] = 0;
+			sbi->blocknr_to_entry[block_low] = -1;
 			weak_idx = hash_32(pentry->fp_weak.u32, sbi->num_entries_bits);
 			sbi->weak_hash_table[weak_idx] = 0;
 			strong_idx = hash_64(pentry->fp_strong.u64s[0],sbi->num_entries_bits);

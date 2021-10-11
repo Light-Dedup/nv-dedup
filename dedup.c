@@ -49,11 +49,22 @@ unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffe
     unsigned long blocknr;
     entrynr_t alloc_entry;
     bool flush_entry = false;// whether flush weak entry
+    INIT_TIMING(weak_fp_calc_time);
+    INIT_TIMING(strong_fp_calc_time);
+    INIT_TIMING(hash_table_time);
 
     pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
+
+    NOVA_START_TIMING(weak_fp_calc_t, weak_fp_calc_time);
     nova_fp_weak_calc(&sbi->nova_fp_weak_ctx, data_buffer,&fp_weak);
+    NOVA_END_TIMING(weak_fp_calc_t, weak_fp_calc_time);
+
+
+    NOVA_START_TIMING(hash_table_t, hash_table_time);
     weak_idx = hash_32(fp_weak.u32, sbi->num_entries_bits);
     weak_find_entry = sbi->weak_hash_table[weak_idx];
+    NOVA_END_TIMING(hash_table_t, hash_table_time);
+
     if(weak_find_entry != 0) {
         /**
          *  Only when a match is found will a strong fingerprint like MD5
@@ -79,7 +90,10 @@ unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffe
             *  Then, NV-Dedup updates the entry of the stored chunk by adding the strong fingerprint.
             */
            kmem = nova_get_block(sb, weak_entry->blocknr);
+
+           NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
            nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, kmem, &fp_strong);
+           NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
 
            weak_entry->flag = 1;
            weak_entry->fp_strong = fp_strong;
@@ -89,7 +103,8 @@ unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffe
             sbi->strong_hash_table[strong_idx] = weak_find_entry;
        }
 
-       nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, data_buffer, &entry_fp_strong);
+       NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
+       nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, data_buffer, &entry_fp_strong);NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
 
        if(cmp_fp_strong(&fp_strong, &entry_fp_strong)) {
            // if both fingerprint are euqal
@@ -98,8 +113,12 @@ unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffe
            flush_entry = true;
        } else {
            // if both fingerprint are not equal
+           
+           NOVA_START_TIMING(hash_table_t, hash_table_time);
            entry_strong_idx = hash_64(entry_fp_strong.u64s[0],sbi->num_entries_bits);
            strong_find_entry = sbi->strong_hash_table[entry_strong_idx];
+           NOVA_END_TIMING(hash_table_t, hash_table_time);
+           
            if(strong_find_entry != 0) {
                // if the corresponding strong fingerprint is found
                // add the refcount and return
