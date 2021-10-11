@@ -756,7 +756,6 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 		}
 
 		blocknr = nova_dedup_new_write(sb, data_buffer);
-		nova_dbg("The blocknr is : %lu",blocknr);
 		copied = bytes;
 		allocated = 1;
 
