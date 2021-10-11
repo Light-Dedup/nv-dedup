@@ -121,6 +121,7 @@ unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffe
                pentry->refcount = 1;
                nova_flush_buffer(pentry, sizeof(*pentry), true);
                sbi->strong_hash_table[entry_strong_idx] = nova_get_addr_off(sbi, pentry);
+               sbi->blocknr_to_entry[blocknr] = nova_get_addr_off(sbi, pentry);
            }
 
        }
@@ -142,6 +143,7 @@ unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffe
         nova_flush_buffer(pentry, sizeof(*pentry),true);
 
         sbi->weak_hash_table[weak_idx] = nova_get_addr_off(sbi, pentry);
+        sbi->blocknr_to_entry[blocknr] = nova_get_addr_off(sbi,pentry);
     }
 
     return blocknr;

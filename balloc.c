@@ -27,6 +27,7 @@
 #include <linux/bitops.h>
 #include "nova.h"
 #include "inode.h"
+#include "entry.h"
 
 int nova_alloc_block_free_lists(struct super_block *sb)
 {
@@ -391,6 +392,8 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 	int new_node_used = 0;
 	int ret;
 	INIT_TIMING(free_time);
+	int64_t to_be_free_idx = 0;
+	struct nova_pmm_entry *pentry;
 
 	if (num <= 0) {
 		nova_dbg("%s ERROR: free %d\n", __func__, num);
@@ -416,6 +419,19 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 	num_blocks = nova_get_numblocks(btype) * num;
 	block_low = blocknr;
 	block_high = blocknr + num_blocks - 1;
+
+	if(num_blocks == 1) {
+		to_be_free_idx = sbi->blocknr_to_entry[block_low];
+		if(to_be_free_idx != 0) {
+			pentry = nova_get_block(sb, to_be_free_idx);
+			--pentry->refcount;
+			if(pentry->refcount != 0) {
+				nova_flush_buffer(pentry, sizeof(*pentry), true);
+				ret = 0;
+				goto out;
+			}
+		}
+	}
 
 	nova_dbgv("Free: %lu - %lu\n", block_low, block_high);
 

@@ -792,7 +792,7 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 			goto out;
 		}
 
-		nova_dbgv("Write: %p, %lu\n", kmem, copied);
+		nova_dbgv("Write: %p, %lu\n", data_buffer, copied);
 		if (copied > 0) {
 			status = copied;
 			written += copied;
@@ -803,7 +803,7 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 		}
 		if (unlikely(copied != bytes)) {
 			nova_dbg("%s ERROR!: %p, bytes %lu, copied %lu\n",
-				__func__, kmem, bytes, copied);
+				__func__, data_buffer, bytes, copied);
 			if (status >= 0)
 				status = -EFAULT;
 		}
