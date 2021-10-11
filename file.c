@@ -22,8 +22,7 @@
 #include <asm/mman.h>
 #include "nova.h"
 #include "inode.h"
-#include "entry.h"
-
+#include "dedup.h"
 
 static inline int nova_can_set_blocksize_hint(struct inode *inode,
 	struct nova_inode *pi, loff_t new_size)
@@ -625,7 +624,6 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 	struct nova_inode_info *si = NOVA_I(inode);
 	struct nova_inode_info_header *sih = &si->header;
 	struct super_block *sb = inode->i_sb;
-    struct nova_sb_info *sbi = NOVA_SB(sb);
 	struct nova_inode *pi, inode_copy;
 	struct nova_file_write_entry entry_data;
 	struct nova_inode_update update;
@@ -642,7 +640,6 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 	size_t bytes;
 	long status = 0;
 	INIT_TIMING(cow_write_time);
-	INIT_TIMING(memcpy_time);
 	unsigned long step = 0;
 	ssize_t ret;
 	u64 begin_tail = 0;
@@ -715,47 +712,61 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 		start_blk = pos >> sb->s_blocksize_bits;
 
 		/* don't zero-out the allocated blocks */
-		allocated = nova_new_data_blocks(sb, sih, &blocknr, start_blk,
-				 num_blocks, ALLOC_NO_INIT, ANY_CPU,
-				 ALLOC_FROM_HEAD);
+		/**
+		 * Cancel block allocation
+		 */
+		// allocated = nova_new_data_blocks(sb, sih, &blocknr, start_blk,
+		// 		 num_blocks, ALLOC_NO_INIT, ANY_CPU,
+		// 		 ALLOC_FROM_HEAD);
 
-		nova_dbg_verbose("%s: alloc %d blocks @ %lu\n", __func__,
-						allocated, blocknr);
+		// nova_dbg_verbose("%s: alloc %d blocks @ %lu\n", __func__,
+		// 				allocated, blocknr);
 
-		if (allocated <= 0) {
-			nova_dbg("%s alloc blocks failed %d\n", __func__,
-								allocated);
-			ret = allocated;
-			goto out;
-		}
+		// if (allocated <= 0) {
+		// 	nova_dbg("%s alloc blocks failed %d\n", __func__,
+		// 						allocated);
+		// 	ret = allocated;
+		// 	goto out;
+		// }
 
 		step++;
-		bytes = sb->s_blocksize * allocated - offset;
+		bytes = sb->s_blocksize - offset;
 		if (bytes > count)
 			bytes = count;
 
-		kmem = nova_get_block(inode->i_sb,
-			     nova_get_block_off(sb, blocknr, sih->i_blk_type));
-
-		if (offset || ((offset + bytes) & (PAGE_SIZE - 1)) != 0)  {
-			ret = nova_handle_head_tail_blocks(sb, inode, pos,
-							   bytes, kmem);
-			if (ret)
-				goto out;
-		}
+		// kmem = nova_get_block(inode->i_sb,
+		// 	     nova_get_block_off(sb, blocknr, sih->i_blk_type));
+		
+		/**
+		 * Author:Hsiao
+		 * Since it's proof of concept
+		 * Handle_head_tail is not processed
+		 */
+		// if (offset || ((offset + bytes) & (PAGE_SIZE - 1)) != 0)  {
+		// 	ret = nova_handle_head_tail_blocks(sb, inode, pos,
+		// 					   bytes, kmem);
+		// 	if (ret)
+		// 		goto out;
+		// }
 		/* Now copy from user buf */
 		//		nova_dbg("Write: %p\n", kmem);
 		if( copy_from_user(data_buffer + offset, buf, bytes) ) {
 			ret = -EFAULT;
 			goto out;
 		}
+
+		blocknr = nova_dedup_new_write(sb, data_buffer);
+		nova_dbg("The blocknr is : %lu",blocknr);
+		copied = bytes;
+		allocated = 1;
+
 		
-		NOVA_START_TIMING(memcpy_w_nvmm_t, memcpy_time);
-		nova_memunlock_range(sb, kmem + offset, bytes);
-		copied = bytes - memcpy_to_pmem_nocache(kmem + offset,
-						buf, bytes);
-		nova_memlock_range(sb, kmem + offset, bytes);
-		NOVA_END_TIMING(memcpy_w_nvmm_t, memcpy_time);
+		// NOVA_START_TIMING(memcpy_w_nvmm_t, memcpy_time);
+		// nova_memunlock_range(sb, kmem + offset, bytes);
+		// copied = bytes - memcpy_to_pmem_nocache(kmem + offset,
+		// 				buf, bytes);
+		// nova_memlock_range(sb, kmem + offset, bytes);
+		// NOVA_END_TIMING(memcpy_w_nvmm_t, memcpy_time);
 
 		if (data_csum > 0 || data_parity > 0) {
 			ret = nova_protect_file_data(sb, inode, pos, bytes,

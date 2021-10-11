@@ -963,6 +963,27 @@ int nova_new_data_blocks(struct super_block *sb,
 	return allocated;
 }
 
+int nova_new_data_block(struct super_block *sb,unsigned long *blocknr,
+	enum nova_alloc_init zero)
+{
+	int allocated;
+	INIT_TIMING(alloc_time);
+
+	NOVA_START_TIMING(new_data_blocks_t, alloc_time);
+	allocated = nova_new_blocks(sb, blocknr, 1,
+			    NOVA_BLOCK_TYPE_4K, zero, DATA, ANY_CPU, ALLOC_FROM_HEAD);
+	NOVA_END_TIMING(new_data_blocks_t, alloc_time);
+	if (allocated < 0) {
+		nova_dbgv("FAILED: alloc %d data blocks from %lu to %lu\n",
+			   allocated, *blocknr,
+			  *blocknr + allocated - 1);
+	} else {
+		nova_dbgv("alloc %d data blocks from %lu to %lu\n",
+			  allocated, *blocknr,
+			  *blocknr + allocated - 1);
+	}
+	return allocated;
+}
 
 // Allocate log blocks.	 The offset for the allocated block comes back in
 // blocknr.  Return the number of blocks allocated.
