@@ -426,6 +426,9 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	sbi->strong_hash_table = vzalloc(sizeof(u64) * sz);
 	sbi->blocknr_to_entry = vzalloc(sizeof(u64) * sz);
 	memset(sbi->blocknr_to_entry, -1, sizeof(*sbi->blocknr_to_entry));
+	sbi->dup_block = 0;
+	sbi->dedup_mode = NON_FIN;
+	nova_info("sbi->dup_block : %u sbi->dedup_mode: %u SAMPLE_BLOCK: %u NON_FIN: %u STR_FIN:%u", sbi->dup_block, NON_FIN, SAMPLE_BLOCK, NON_FIN_THRESH, STR_FIN_THRESH);
 	// nova_dbg("sbi->num_entries:%lu sbi->num_entries_bits:%lu",sbi->num_entries,sbi->num_entries_bits);
 	
 	/**

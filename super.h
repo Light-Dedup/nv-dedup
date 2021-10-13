@@ -187,6 +187,9 @@ struct nova_sb_info {
 	u64 *weak_hash_table;
 	u64 *strong_hash_table;
 	int64_t *blocknr_to_entry;
+	u32 dup_block;
+	u32 cur_block;
+	u32 dedup_mode;
 };
 
 static inline struct nova_sb_info *NOVA_SB(struct super_block *sb)

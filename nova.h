@@ -54,6 +54,13 @@
 #define PAGE_SHIFT_2M 21
 #define PAGE_SHIFT_1G 30
 
+#define SAMPLE_BLOCK 64
+#define NON_FIN_THRESH (unsigned int)((SAMPLE_BLOCK) * 0.25)
+#define STR_FIN_THRESH (unsigned int)((SAMPLE_BLOCK) * 0.65)
+
+#define NON_FIN 0x00000001
+#define WEAK_STR_FIN 0x00000002
+#define STR_FIN 0x00000004
 
 /*
  * Debug code
