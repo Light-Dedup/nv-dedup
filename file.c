@@ -635,7 +635,7 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 	unsigned long blocknr = 0;
 	unsigned int data_bits;
 	int allocated = 0;
-	void *kmem;
+	// void *kmem;
 	u64 file_size;
 	size_t bytes;
 	long status = 0;

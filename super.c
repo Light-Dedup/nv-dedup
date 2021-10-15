@@ -437,6 +437,10 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	retval = nova_init_entry_list(sb);
 	if(retval < 0)
 		return ERR_PTR(retval);
+
+	retval = nova_calc_non_fin_thread_init(sb);
+	if(retval < 0)
+		return ERR_PTR(retval);
 	
 	nova_dbgv("nova: Default block size set to 4K\n");
 	sbi->blocksize = blocksize = NOVA_DEF_BLOCK_SIZE_4K;
@@ -497,6 +501,10 @@ static struct nova_inode *nova_init(struct super_block *sb,
 
 	if( nova_fp_weak_ctx_init(&sbi->nova_fp_weak_ctx) < 0 ) {
 		nova_warn("weak fp init failed");
+	}
+
+	if( nova_fp_weak_ctx_init(&sbi->nova_non_fin_calc_ctx) < 0 ) {
+		nova_warn("non_fin_calc fp init failed");
 	}
 
 	nova_sync_super(sb);
@@ -969,23 +977,25 @@ static void nova_put_super(struct super_block *sb)
 
 	nova_print_curr_epoch_id(sb);
 
-	nova_fp_hash_ctx_free(&sbi->nova_fp_strong_ctx);
-	nova_fp_hash_ctx_free(&sbi->nova_fp_weak_ctx);
-	nova_free_entry_list(sb);
-	vfree(sbi->weak_hash_table);
-	vfree(sbi->strong_hash_table);
-	vfree(sbi->blocknr_to_entry);
-
 	/* It's unmount time, so unmap the nova memory */
 //	nova_print_free_lists(sb);
 	if (sbi->virt_addr) {
 		nova_save_snapshots(sb);
+		nova_calc_non_fin_stop(sb);
 		kmem_cache_free(nova_inode_cachep, sbi->snapshot_si);
 		nova_save_inode_list_to_log(sb);
 		/* Save everything before blocknode mapping! */
 		nova_save_blocknode_mappings_to_log(sb);
 		sbi->virt_addr = NULL;
 	}
+
+	nova_fp_hash_ctx_free(&sbi->nova_fp_strong_ctx);
+	nova_fp_hash_ctx_free(&sbi->nova_fp_weak_ctx);
+	nova_fp_hash_ctx_free(&sbi->nova_non_fin_calc_ctx);
+	nova_free_entry_list(sb);
+	vfree(sbi->weak_hash_table);
+	vfree(sbi->strong_hash_table);
+	vfree(sbi->blocknr_to_entry);
 
 	nova_delete_free_lists(sb);
 

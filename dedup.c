@@ -2,6 +2,7 @@
 #include "dedup.h"
 #include "nova.h"
 #include "entry.h"
+#include <linux/random.h>
 
 inline bool cmp_fp_strong(struct nova_fp_strong *dst, struct nova_fp_strong *src) {
     return (dst->u64s[0] == src->u64s[0] && dst->u64s[1] == src->u64s[1] 
@@ -56,7 +57,7 @@ unsigned long nova_dedup_str_fin(struct super_block *sb, const char* data_buffer
     u64 strong_idx;
     entrynr_t weak_find_entry, strong_find_entry, alloc_entry;
     unsigned long blocknr;
-    void *kmem;
+    // void *kmem;
     INIT_TIMING(weak_fp_calc_time);
     INIT_TIMING(strong_fp_calc_time);
     INIT_TIMING(hash_table_time);
@@ -85,7 +86,7 @@ unsigned long nova_dedup_str_fin(struct super_block *sb, const char* data_buffer
         pentry = pentries + strong_find_entry;
         ++pentry->refcount;
         pentry->fp_weak = fp_weak;
-        pentry->flag = true;
+        pentry->flag = FP_STRONG_FLAG;
         ++sbi->dup_block;
         blocknr = pentry->blocknr;
     }else {
@@ -93,7 +94,7 @@ unsigned long nova_dedup_str_fin(struct super_block *sb, const char* data_buffer
         blocknr = nova_alloc_block_write(sb,data_buffer);
 
         pentry = pentries + alloc_entry;
-        pentry->flag = true;
+        pentry->flag = FP_STRONG_FLAG;
         pentry->blocknr = blocknr;
         pentry->fp_strong = fp_strong;
         pentry->fp_weak = fp_weak;
@@ -153,7 +154,7 @@ unsigned long nova_dedup_weak_str_fin(struct super_block *sb, const char* data_b
 
         weak_entry = pentries + weak_find_entry;
         
-        if(weak_entry->flag) {
+        if(weak_entry->flag == FP_STRONG_FLAG) {
              /**
             *  The sixth field is a 1 B flag to indicate 
             *  whether the strong fingerprint is valid or not.
@@ -163,13 +164,13 @@ unsigned long nova_dedup_weak_str_fin(struct super_block *sb, const char* data_b
            // assign it to entry_fp_strong
 
            entry_fp_strong = weak_entry->fp_strong;
-        }else {
+        }else if(weak_entry->flag == FP_WEAK_FLAG){
             kmem = nova_get_block(sb, weak_entry->blocknr);
             NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
             nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, kmem, &fp_strong);
             NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
             
-            weak_entry->flag = 1;
+            weak_entry->flag = FP_STRONG_FLAG;
             weak_entry->fp_strong = fp_strong;
             flush_entry = true;
             
@@ -207,7 +208,7 @@ unsigned long nova_dedup_weak_str_fin(struct super_block *sb, const char* data_b
                 alloc_entry = nova_alloc_entry(sb);
                 blocknr = nova_alloc_block_write(sb,data_buffer);
                 pentry = pentries + alloc_entry;
-                pentry->flag = 1;
+                pentry->flag = FP_STRONG_FLAG;
                 pentry->fp_weak = fp_weak;
                 pentry->fp_strong = entry_fp_strong;
                 pentry->blocknr = blocknr;
@@ -232,7 +233,7 @@ unsigned long nova_dedup_weak_str_fin(struct super_block *sb, const char* data_b
         blocknr = nova_alloc_block_write(sb,data_buffer);
         
         pentry = pentries + alloc_entry;
-        pentry->flag = false;
+        pentry->flag = FP_WEAK_FLAG;
         pentry->fp_weak = fp_weak;
         pentry->blocknr = blocknr;
         pentry->refcount = 1;
@@ -252,18 +253,17 @@ unsigned long nova_dedup_non_fin(struct super_block *sb, const char* data_buffer
     entrynr_t alloc_entry;
     unsigned long blocknr;
     
-    if(sbi->cur_block & 3) {
-        return nova_dedup_weak_str_fin(sb, data_buffer);
-    }else {
-        alloc_entry = nova_alloc_entry(sb);
-        blocknr = nova_alloc_block_write(sb, data_buffer);
-        pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
-        pentry = pentries + alloc_entry;
-        pentry->blocknr = blocknr;
-        pentry->refcount = 1;
-        nova_flush_buffer(pentry, sizeof(*pentry), true);
-        sbi->blocknr_to_entry[blocknr] = alloc_entry;
-    }
+    alloc_entry = nova_alloc_entry(sb);
+    blocknr = nova_alloc_block_write(sb, data_buffer);
+    pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start,NOVA_BLOCK_TYPE_4K));
+    pentry = pentries + alloc_entry;
+    pentry->blocknr = blocknr;
+    pentry->flag = NON_FIN_FLAG;
+    pentry->refcount = 1;
+    nova_flush_buffer(pentry, sizeof(*pentry), true);
+    sbi->blocknr_to_entry[blocknr] = alloc_entry;
+
+    return blocknr;
 }
 
 unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffer)
@@ -271,16 +271,26 @@ unsigned long nova_dedup_new_write(struct super_block *sb,const char* data_buffe
     struct nova_sb_info *sbi = NOVA_SB(sb);
     u32 dup_block = 0;
     u32 dup_mode = 0;
+    unsigned long randomNum;
 
     ++sbi->cur_block;
     if(sbi->cur_block >= SAMPLE_BLOCK) {
+        if(sbi->dedup_mode == NON_FIN) {
+            wakeup_calc_non_fin(sb);
+        }
         dup_block = sbi->dup_block;
         if(dup_block > STR_FIN_THRESH) {
             sbi->dedup_mode = STR_FIN;
         }else if(dup_block > NON_FIN_THRESH) {
             sbi->dedup_mode = WEAK_STR_FIN;
         }else {
-            sbi->dedup_mode = NON_FIN;
+            get_random_bytes(&randomNum, sizeof(unsigned long));
+            if(randomNum & 1) {
+                sbi->dedup_mode = NON_FIN;
+            }
+            else {
+                sbi->dedup_mode = WEAK_STR_FIN;
+            }
         }
         sbi->cur_block = 0;
         sbi->dup_block = 0;

@@ -71,3 +71,104 @@ void nova_free_entry_list(struct super_block *sb)
 
     vfree(sbi->meta_free_list.kfifo.data);
 }
+/**
+ * @author
+ * 
+ */
+int nova_calc_non_fin_stop(struct super_block *sb)
+{
+    struct nova_sb_info *sbi = NOVA_SB(sb);
+
+    if(sbi->calc_non_fin_thread)
+        kthread_stop(sbi->calc_non_fin_thread);
+
+    return 0;
+}
+
+static void calc_non_fin_try_sleeping(struct nova_sb_info *sbi)
+{
+    DEFINE_WAIT(wait);
+    prepare_to_wait(&sbi->calc_non_fin_wait, &wait, TASK_INTERRUPTIBLE);
+    schedule();
+    finish_wait(&sbi->calc_non_fin_wait, &wait);
+}
+
+static int nova_calc_non_fin(struct super_block *sb)
+{
+    struct nova_sb_info *sbi = NOVA_SB(sb);
+    struct nova_pmm_entry *pentries, *pentry;
+    struct nova_fp_weak fp_weak;
+    u32 weak_idx;
+    void *kmem;
+    unsigned long idx;
+
+    pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
+
+    for(idx = 0; idx < sbi->num_entries; ++idx) {
+        pentry = pentries + idx;
+        if(pentry->flag == NON_FIN_FLAG) {
+            if(pentry->blocknr != 0 && pentry->blocknr < sbi->num_blocks && sbi->blocknr_to_entry[pentry->blocknr] == idx) {
+                kmem = nova_get_block(sb, pentry->blocknr);
+                nova_fp_weak_calc(&sbi->nova_non_fin_calc_ctx, kmem, &fp_weak);
+                pentry->fp_weak = fp_weak;
+                nova_flush_buffer(pentry, sizeof(*pentry), true);
+                weak_idx = hash_32(fp_weak.u32, sbi->num_entries_bits);
+                sbi->weak_hash_table[weak_idx] = idx;
+            }
+        }
+    }
+    return 0;
+}
+/**
+ * @author: Hsiao
+ * 
+ */
+static int calc_non_fin(void *arg)
+{
+    struct super_block *sb = arg;
+    struct nova_sb_info *sbi = NOVA_SB(sb);
+
+    nova_dbg("Running calc non fin thread\n");
+
+    for( ; ; ) {
+        calc_non_fin_try_sleeping(sbi);
+
+        if(kthread_should_stop())
+            break;
+        
+        nova_calc_non_fin(sb);
+    }
+    nova_dbg("Exiting calc non fin thread\n");
+
+    return 0;
+}
+/**
+ * @author: Hsiao
+ * 
+ */
+int nova_calc_non_fin_thread_init(struct super_block *sb)
+{
+    struct nova_sb_info *sbi = NOVA_SB(sb);
+    int ret = 0;
+
+    init_waitqueue_head(&sbi->calc_non_fin_wait);
+
+    sbi->calc_non_fin_thread = kthread_run(calc_non_fin, sb, "nova_calc_non_fin");
+    if( IS_ERR(sbi->calc_non_fin_thread)) {
+        nova_info("Failed to start NOVA non_fin calculator thread.\n");
+		ret = -1;
+    }
+
+    nova_info("Start NOVA non_fin calculator thread.\n");
+    return ret;
+}
+
+void wakeup_calc_non_fin(struct super_block *sb)
+{
+    struct nova_sb_info *sbi = NOVA_SB(sb);
+
+    if(!waitqueue_active(&sbi->calc_non_fin_wait))
+        return;
+    nova_dbg("waking up the calc non fin thread");
+    wake_up_interruptible(&sbi->calc_non_fin_wait);
+}

@@ -178,6 +178,7 @@ struct nova_sb_info {
 	unsigned long per_list_blocks;
 	struct nova_fp_hash_ctx nova_fp_strong_ctx;
 	struct nova_fp_hash_ctx nova_fp_weak_ctx;
+	struct nova_fp_hash_ctx nova_non_fin_calc_ctx;
 
 	unsigned long	metadata_start;
 	struct kfifo meta_free_list;
@@ -190,6 +191,8 @@ struct nova_sb_info {
 	u32 dup_block;
 	u32 cur_block;
 	u32 dedup_mode;
+	struct task_struct *calc_non_fin_thread;
+	wait_queue_head_t calc_non_fin_wait;
 };
 
 static inline struct nova_sb_info *NOVA_SB(struct super_block *sb)
