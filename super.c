@@ -412,7 +412,7 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	*/
 	sbi->metadata_start = sbi->head_reserved_blocks;
 	sbi->num_entries_blocks = ( ( sbi->num_blocks * sizeof(struct nova_pmm_entry) ) >> PAGE_SHIFT ) + 1 ;
-	sbi->head_reserved_blocks += sbi->num_entries;
+	sbi->head_reserved_blocks += sbi->num_entries_blocks;
 
 	// nova_dbg("sbi->num_blocks:%lu metadata_start:%lu num_entries_block:%lu head_reserved_blocks:%lu",sbi->num_blocks, sbi->metadata_start, sbi->num_entries_blocks, sbi->head_reserved_blocks);
 
@@ -438,9 +438,9 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	if(retval < 0)
 		return ERR_PTR(retval);
 
-	retval = nova_calc_non_fin_thread_init(sb);
-	if(retval < 0)
-		return ERR_PTR(retval);
+	// retval = nova_calc_non_fin_thread_init(sb);
+	// if(retval < 0)
+	// 	return ERR_PTR(retval);
 	
 	nova_dbgv("nova: Default block size set to 4K\n");
 	sbi->blocksize = blocksize = NOVA_DEF_BLOCK_SIZE_4K;
@@ -981,7 +981,7 @@ static void nova_put_super(struct super_block *sb)
 //	nova_print_free_lists(sb);
 	if (sbi->virt_addr) {
 		nova_save_snapshots(sb);
-		nova_calc_non_fin_stop(sb);
+		// nova_calc_non_fin_stop(sb);
 		kmem_cache_free(nova_inode_cachep, sbi->snapshot_si);
 		nova_save_inode_list_to_log(sb);
 		/* Save everything before blocknode mapping! */

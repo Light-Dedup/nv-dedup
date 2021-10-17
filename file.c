@@ -755,9 +755,14 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 			goto out;
 		}
 
-		blocknr = nova_dedup_new_write(sb, data_buffer);
+		allocated = nova_dedup_new_write(sb, data_buffer, &blocknr);
 		copied = bytes;
-		allocated = 1;
+		if (allocated < 0) {
+			nova_dbg("%s alloc blocks failed %d\n", __func__,
+								allocated);
+			ret = allocated;
+			goto out;
+		}
 
 		
 		// NOVA_START_TIMING(memcpy_w_nvmm_t, memcpy_time);
@@ -780,7 +785,7 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 			file_size = cpu_to_le64(inode->i_size);
 
 		nova_init_file_write_entry(sb, sih, &entry_data, epoch_id,
-					start_blk, allocated, blocknr, time,
+					start_blk, 1, blocknr, time,
 					file_size);
 
 		ret = nova_append_file_write_entry(sb, pi, inode,
