@@ -449,6 +449,13 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	if(retval < 0)
 		return ERR_PTR(retval);
 	
+
+    sbi->nova_hentry_cachep = kmem_cache_create("nova_hentry_cache",
+                                                sizeof(struct nova_hentry),
+                                                0, 0, NULL);
+    if(sbi->nova_hentry_cachep == NULL)
+        return ERR_PTR(-ENOMEM);
+
 	nova_dbgv("nova: Default block size set to 4K\n");
 	sbi->blocksize = blocksize = NOVA_DEF_BLOCK_SIZE_4K;
 	nova_set_blocksize(sb, sbi->blocksize);
@@ -1009,18 +1016,19 @@ static void nova_put_super(struct super_block *sb)
 		while( !hlist_empty(hlist) ) {
 			hentry = hlist_entry_safe(hlist->first, typeof(*hentry), node);
 			hlist_del(&hentry->node);
-			vfree(hentry);
+			kmem_cache_free(sbi->nova_hentry_cachep, hentry);
 		}
 		hlist = &sbi->strong_hash_table[i_hlist];
 		while( !hlist_empty(hlist) ) {
 			hentry = hlist_entry_safe(hlist->first, typeof(*hentry), node);
 			hlist_del(&hentry->node);
-			vfree(hentry);
+			kmem_cache_free(sbi->nova_hentry_cachep, hentry);
 		}
 	}
 	vfree(sbi->weak_hash_table);
 	vfree(sbi->strong_hash_table);
 	vfree(sbi->blocknr_to_entry);
+	kmem_cache_destroy(sbi->nova_hentry_cachep);
 
 	nova_delete_free_lists(sb);
 

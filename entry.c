@@ -115,7 +115,7 @@ static int nova_calc_non_fin(struct super_block *sb)
                 pentry->fp_weak = fp_weak;
                 nova_flush_buffer(pentry, sizeof(*pentry), true);
                 weak_idx = hash_32(fp_weak.u32, sbi->num_entries_bits);
-                hentry = nova_alloc_hentry();
+                hentry = nova_alloc_hentry(sb);
                 hentry->entrynr = idx;
                 hlist_add_head(&hentry->node, &sbi->weak_hash_table[weak_idx]);
                 // sbi->weak_hash_table[weak_idx] = idx;

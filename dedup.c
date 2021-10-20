@@ -39,10 +39,12 @@ out:
     return allocated;
 }
 
-struct nova_hentry *nova_alloc_hentry(void)
+struct nova_hentry *nova_alloc_hentry(struct super_block *sb)
 {
+    struct nova_sb_info *sbi = NOVA_SB(sb);
     struct nova_hentry *hentry;
-    hentry = vzalloc(sizeof(struct nova_hentry));
+
+    hentry = kmem_cache_zalloc(sbi->nova_hentry_cachep, GFP_KERNEL);
     if(unlikely(!hentry))
         return NULL;
     INIT_HLIST_NODE(&hentry->node);
@@ -151,7 +153,7 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
         pentry->fp_strong = fp_strong;
         pentry->fp_weak = fp_weak;
         pentry->refcount = 1;
-        strong_hentry = nova_alloc_hentry();
+        strong_hentry = nova_alloc_hentry(sb);
         strong_hentry->entrynr = alloc_entry;
         hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
         sbi->blocknr_to_entry[*blocknr] = alloc_entry;
@@ -161,7 +163,7 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
     nova_flush_buffer(pentry, sizeof(*pentry), true);
 
     if(!weak_find_hentry) {
-        weak_hentry = nova_alloc_hentry();
+        weak_hentry = nova_alloc_hentry(sb);
         weak_hentry->entrynr = strong_find_entry;
         hlist_add_head(&weak_hentry->node, &sbi->weak_hash_table[weak_idx]);
     }
@@ -233,7 +235,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
             weak_entry->fp_strong = fp_strong;
             flush_entry = true;
             
-            weak_hentry = nova_alloc_hentry();
+            weak_hentry = nova_alloc_hentry(sb);
             weak_hentry->entrynr = weak_find_hentry->entrynr;
             strong_idx = hash_64(fp_strong.u64s[0],sbi->num_entries_bits);
             hlist_add_head(&weak_hentry->node, &sbi->strong_hash_table[strong_idx]);
@@ -280,7 +282,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
                 pentry->blocknr = *blocknr;
                 pentry->refcount = 1;
                 nova_flush_buffer(pentry, sizeof(*pentry), true);
-                strong_hentry = nova_alloc_hentry();
+                strong_hentry = nova_alloc_hentry(sb);
                 strong_hentry->entrynr = alloc_entry;
                 hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[entry_strong_idx]);
                 sbi->blocknr_to_entry[*blocknr] = alloc_entry;
@@ -309,7 +311,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
         pentry->refcount = 1;
         nova_flush_buffer(pentry, sizeof(*pentry),true);
 
-        weak_hentry = nova_alloc_hentry();
+        weak_hentry = nova_alloc_hentry(sb);
         weak_hentry->entrynr = alloc_entry;
         hlist_add_head(&weak_hentry->node, &sbi->weak_hash_table[weak_idx]);
         sbi->blocknr_to_entry[*blocknr] = alloc_entry;

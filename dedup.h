@@ -15,6 +15,6 @@ struct nova_hentry *nova_find_in_weak_hlist(struct super_block *sb, struct hlist
 
 struct nova_hentry *nova_find_in_strong_hlist(struct super_block *sb, struct hlist_head *hlist, struct nova_fp_strong *fp_strong);
 
-struct nova_hentry *nova_alloc_hentry(void);
+struct nova_hentry *nova_alloc_hentry(struct super_block* sb);
 
 #endif
