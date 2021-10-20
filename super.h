@@ -185,8 +185,8 @@ struct nova_sb_info {
 	unsigned long num_entries_blocks;
 	unsigned long num_entries;
 	unsigned int num_entries_bits;
-	u64 *weak_hash_table;
-	u64 *strong_hash_table;
+	struct hlist_head *weak_hash_table;
+	struct hlist_head *strong_hash_table;
 	int64_t *blocknr_to_entry;
 	u32 dup_block;
 	u32 cur_block;

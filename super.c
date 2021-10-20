@@ -43,6 +43,7 @@
 #include "super.h"
 #include "inode.h"
 #include "entry.h"
+#include "dedup.h"
 
 int measure_timing;
 int metadata_csum;
@@ -400,6 +401,7 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	u64 epoch_id;
 	int retval;
 	size_t sz;
+	unsigned long i_hlist = 0;
 	INIT_TIMING(init_time);
 
 	NOVA_START_TIMING(new_init_t, init_time);
@@ -422,14 +424,19 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	sbi->num_entries = ( sbi->num_entries_blocks << PAGE_SHIFT ) / sizeof(struct nova_pmm_entry) ;
 	sbi->num_entries_bits = 32 - __builtin_clz(sbi->num_entries);
 	sz = 1 << sbi->num_entries_bits;
-	sbi->weak_hash_table = vzalloc(sizeof(u64) * sz);
-	sbi->strong_hash_table = vzalloc(sizeof(u64) * sz);
+	sbi->weak_hash_table = vzalloc(sizeof(struct hlist_head) * sz);
+	sbi->strong_hash_table = vzalloc(sizeof(struct hlist_head) * sz);
 	sbi->blocknr_to_entry = vzalloc(sizeof(u64) * sz);
 	memset(sbi->blocknr_to_entry, -1, sizeof(*sbi->blocknr_to_entry));
 	sbi->dup_block = 0;
 	sbi->dedup_mode = NON_FIN;
 	nova_info("sbi->dup_block : %u sbi->dedup_mode: %u SAMPLE_BLOCK: %u NON_FIN: %u STR_FIN:%u", sbi->dup_block, NON_FIN, SAMPLE_BLOCK, NON_FIN_THRESH, STR_FIN_THRESH);
 	// nova_dbg("sbi->num_entries:%lu sbi->num_entries_bits:%lu",sbi->num_entries,sbi->num_entries_bits);
+
+	for(i_hlist = 0; i_hlist < sz; ++i_hlist) {
+		INIT_HLIST_HEAD(&sbi->weak_hash_table[i_hlist]);
+		INIT_HLIST_HEAD(&sbi->strong_hash_table[i_hlist]);
+	}
 	
 	/**
 	 * INIT_METADATA_FREELIST
@@ -438,9 +445,9 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	if(retval < 0)
 		return ERR_PTR(retval);
 
-	// retval = nova_calc_non_fin_thread_init(sb);
-	// if(retval < 0)
-	// 	return ERR_PTR(retval);
+	retval = nova_calc_non_fin_thread_init(sb);
+	if(retval < 0)
+		return ERR_PTR(retval);
 	
 	nova_dbgv("nova: Default block size set to 4K\n");
 	sbi->blocksize = blocksize = NOVA_DEF_BLOCK_SIZE_4K;
@@ -973,7 +980,10 @@ static void nova_put_super(struct super_block *sb)
 {
 	struct nova_sb_info *sbi = NOVA_SB(sb);
 	struct inode_map *inode_map;
-	int i;
+	int i, i_hlist;
+	size_t sz;
+	struct hlist_head *hlist;
+	struct nova_hentry *hentry;
 
 	nova_print_curr_epoch_id(sb);
 
@@ -981,7 +991,7 @@ static void nova_put_super(struct super_block *sb)
 //	nova_print_free_lists(sb);
 	if (sbi->virt_addr) {
 		nova_save_snapshots(sb);
-		// nova_calc_non_fin_stop(sb);
+		nova_calc_non_fin_stop(sb);
 		kmem_cache_free(nova_inode_cachep, sbi->snapshot_si);
 		nova_save_inode_list_to_log(sb);
 		/* Save everything before blocknode mapping! */
@@ -993,6 +1003,21 @@ static void nova_put_super(struct super_block *sb)
 	nova_fp_hash_ctx_free(&sbi->nova_fp_weak_ctx);
 	nova_fp_hash_ctx_free(&sbi->nova_non_fin_calc_ctx);
 	nova_free_entry_list(sb);
+	sz = 1 << sbi->num_entries_bits;
+	for(i_hlist = 0; i_hlist < sz; ++i_hlist) {
+		hlist = &sbi->weak_hash_table[i_hlist];
+		while( !hlist_empty(hlist) ) {
+			hentry = hlist_entry_safe(hlist->first, typeof(*hentry), node);
+			hlist_del(&hentry->node);
+			vfree(hentry);
+		}
+		hlist = &sbi->strong_hash_table[i_hlist];
+		while( !hlist_empty(hlist) ) {
+			hentry = hlist_entry_safe(hlist->first, typeof(*hentry), node);
+			hlist_del(&hentry->node);
+			vfree(hentry);
+		}
+	}
 	vfree(sbi->weak_hash_table);
 	vfree(sbi->strong_hash_table);
 	vfree(sbi->blocknr_to_entry);

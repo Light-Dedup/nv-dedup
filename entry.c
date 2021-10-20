@@ -2,6 +2,7 @@
 #include "entry.h"
 #include "super.h"
 #include "nova.h"
+#include "dedup.h"
 
 /* 
 * Author:Hsiao
@@ -101,6 +102,7 @@ static int nova_calc_non_fin(struct super_block *sb)
     u32 weak_idx;
     void *kmem;
     unsigned long idx;
+    struct nova_hentry *hentry;
 
     pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
 
@@ -113,7 +115,10 @@ static int nova_calc_non_fin(struct super_block *sb)
                 pentry->fp_weak = fp_weak;
                 nova_flush_buffer(pentry, sizeof(*pentry), true);
                 weak_idx = hash_32(fp_weak.u32, sbi->num_entries_bits);
-                sbi->weak_hash_table[weak_idx] = idx;
+                hentry = nova_alloc_hentry();
+                hentry->entrynr = idx;
+                hlist_add_head(&hentry->node, &sbi->weak_hash_table[weak_idx]);
+                // sbi->weak_hash_table[weak_idx] = idx;
             }
         }
     }
