@@ -1,0 +1,3 @@
+[submodule "nvm_tools"]
+	path = nvm_tools
+	url = git@gitee.com:nova-dedup/nvm_tools.git
