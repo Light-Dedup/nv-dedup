@@ -1011,6 +1011,7 @@ static void nova_put_super(struct super_block *sb)
 	nova_fp_hash_ctx_free(&sbi->nova_non_fin_calc_ctx);
 	nova_free_entry_list(sb);
 	sz = 1 << sbi->num_entries_bits;
+	
 	for(i_hlist = 0; i_hlist < sz; ++i_hlist) {
 		hlist = &sbi->weak_hash_table[i_hlist];
 		while( !hlist_empty(hlist) ) {
@@ -1018,6 +1019,9 @@ static void nova_put_super(struct super_block *sb)
 			hlist_del(&hentry->node);
 			kmem_cache_free(sbi->nova_hentry_cachep, hentry);
 		}
+	}
+
+	for(i_hlist = 0; i_hlist < sz; ++i_hlist) {
 		hlist = &sbi->strong_hash_table[i_hlist];
 		while( !hlist_empty(hlist) ) {
 			hentry = hlist_entry_safe(hlist->first, typeof(*hentry), node);

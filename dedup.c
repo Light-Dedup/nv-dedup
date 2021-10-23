@@ -99,7 +99,7 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
 
     struct nova_sb_info *sbi = NOVA_SB(sb);
     struct nova_fp_weak fp_weak;
-    struct nova_fp_strong fp_strong = {0}, entry_fp_strong = {0};
+    struct nova_fp_strong fp_strong = {0} ;
     struct nova_pmm_entry *pentries, *pentry;
     u32 weak_idx;
     u64 strong_idx;
@@ -123,12 +123,12 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
     NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
 
     NOVA_START_TIMING(hash_table_t, hash_table_time);
-    weak_idx = hash_32(fp_weak.u32, sbi->num_entries_bits);
+    weak_idx = (fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
     weak_find_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &fp_weak);
     NOVA_END_TIMING(hash_table_t, hash_table_time);
     
     NOVA_START_TIMING(hash_table_t, hash_table_time);
-    strong_idx = hash_64(entry_fp_strong.u64s[0],sbi->num_entries_bits);
+    strong_idx = (fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
     strong_find_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &fp_strong);
     NOVA_END_TIMING(hash_table_t, hash_table_time);
 
@@ -202,7 +202,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
     NOVA_END_TIMING(weak_fp_calc_t, weak_fp_calc_time);
 
     NOVA_START_TIMING(hash_table_t, hash_table_time);
-    weak_idx = hash_32(fp_weak.u32, sbi->num_entries_bits);
+    weak_idx = (fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
     weak_find_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &fp_weak);
     NOVA_END_TIMING(hash_table_t, hash_table_time);
 

@@ -437,13 +437,13 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 				goto out;
 			}
 			sbi->blocknr_to_entry[block_low] = -1;
-			weak_idx = hash_32(pentry->fp_weak.u32, sbi->num_entries_bits);
+			weak_idx = (pentry->fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
 			weak_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &pentry->fp_weak);
 			if(weak_hentry){ 
 				hlist_del(&weak_hentry->node);
 				kmem_cache_free(sbi->nova_hentry_cachep, weak_hentry);
 			}
-			strong_idx = hash_64(pentry->fp_strong.u64s[0],sbi->num_entries_bits);
+			strong_idx = (pentry->fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
 			strong_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &pentry->fp_strong);
 			if(strong_hentry){
 				 hlist_del(&strong_hentry->node);
