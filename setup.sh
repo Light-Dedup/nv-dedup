@@ -5,6 +5,9 @@ if [ ! $1 ]; then
 else
     timing=$1
 fi
+
+sleep 5
+
 echo umounting...
 umount /mnt/pmem
 echo Removing the old kernel module...
