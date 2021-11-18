@@ -425,14 +425,14 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 	block_low = blocknr;
 	block_high = blocknr + num_blocks - 1;
 
-	if(num_blocks == 1) {
+	if(num_blocks == 1 && log_page == 0) {
 		pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
 		to_be_free_idx = sbi->blocknr_to_entry[block_low];
 		if(to_be_free_idx >= 0) {
 			pentry = pentries + to_be_free_idx;
 			--pentry->refcount;
+			nova_flush_buffer(pentry, sizeof(*pentry), true);
 			if(pentry->refcount != 0) {
-				nova_flush_buffer(pentry, sizeof(*pentry), true);
 				ret = 0;
 				goto out;
 			}
