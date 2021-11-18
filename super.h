@@ -181,7 +181,9 @@ struct nova_sb_info {
 	struct nova_fp_hash_ctx nova_non_fin_calc_ctx;
 
 	unsigned long	metadata_start;
-	struct kfifo meta_free_list;
+	struct nova_entry_node *free_list_buf;
+	struct list_head meta_free_list;
+	struct mutex free_list_mutex;
 	unsigned long num_entries_blocks;
 	unsigned long num_entries;
 	unsigned int num_entries_bits;

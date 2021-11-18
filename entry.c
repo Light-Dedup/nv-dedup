@@ -12,8 +12,13 @@ entrynr_t nova_alloc_entry(struct super_block *sb)
 {
     entrynr_t entrynr;
     struct nova_sb_info *sbi = NOVA_SB(sb);
+    struct nova_entry_node *alloc_entry;
 
-    BUG_ON( kfifo_out(&sbi->meta_free_list, &entrynr, sizeof(entrynr_t)) != sizeof(entrynr_t) );
+    mutex_lock(&sbi->free_list_mutex);
+    alloc_entry = list_first_entry(&sbi->meta_free_list,struct nova_entry_node, link);
+    list_del(&alloc_entry->link);
+    entrynr = alloc_entry->entrynr;
+    mutex_unlock(&sbi->free_list_mutex);
 
     return entrynr;
 }
@@ -25,8 +30,12 @@ entrynr_t nova_alloc_entry(struct super_block *sb)
 int nova_free_entry(struct super_block *sb, entrynr_t entrynr)
 {
     struct nova_sb_info *sbi = NOVA_SB(sb);
+    struct nova_entry_node *free_entry;
     
-    BUG_ON( kfifo_in(&sbi->meta_free_list, &entrynr, sizeof(entrynr)) != sizeof(entrynr) ); 
+    mutex_lock(&sbi->free_list_mutex);
+    free_entry = &sbi->free_list_buf[entrynr];
+    list_add_tail(&free_entry->link,&sbi->meta_free_list);
+    mutex_unlock(&sbi->free_list_mutex);
 
     return 0;
 }
@@ -38,26 +47,24 @@ int nova_free_entry(struct super_block *sb, entrynr_t entrynr)
 int nova_init_entry_list(struct super_block *sb){
     struct nova_sb_info *sbi = NOVA_SB(sb);
     size_t buf_sz;
-    char *buf;
-    int ret;
     unsigned long i;
+    struct nova_entry_node *i_node;
 
-    buf_sz = sbi->num_blocks * sizeof(entrynr_t);
-    buf = vzalloc(buf_sz);
-    if( buf == NULL) {
-        vfree(buf);
+    buf_sz = sbi->num_blocks * sizeof(struct nova_entry_node);
+    sbi->free_list_buf = vzalloc(buf_sz);
+    if( sbi->free_list_buf == NULL) {
+        vfree(sbi->free_list_buf);
         return -ENOMEM;
     }
 
-    ret = kfifo_init(&sbi->meta_free_list, buf, buf_sz);
+    INIT_LIST_HEAD(&sbi->meta_free_list);
+    mutex_init(&sbi->free_list_mutex);
 
-    if(ret) {
-        vfree(buf);
-        return ret;
-    }
 
     for(i = 0; i < sbi->num_blocks; ++i) {
-        BUG_ON( kfifo_in(&sbi->meta_free_list, &i, sizeof(i)) == 0 );
+        i_node = &sbi->free_list_buf[i];
+        i_node->entrynr = i;
+        list_add_tail(&i_node->link,&sbi->meta_free_list);
     }
     return 0;
 }
@@ -70,7 +77,7 @@ void nova_free_entry_list(struct super_block *sb)
 {
     struct nova_sb_info *sbi = NOVA_SB(sb);
 
-    vfree(sbi->meta_free_list.kfifo.data);
+    vfree(sbi->free_list_buf);
 }
 /**
  * @author
