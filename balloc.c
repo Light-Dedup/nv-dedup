@@ -393,11 +393,6 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 	int new_node_used = 0;
 	int ret;
 	INIT_TIMING(free_time);
-	int64_t to_be_free_idx = 0;
-	struct nova_pmm_entry *pentry, *pentries;
-	u32 weak_idx;
-	u64 strong_idx;
-	struct nova_hentry *weak_hentry, *strong_hentry;
 	
 
 	if (num <= 0) {
@@ -425,33 +420,6 @@ static int nova_free_blocks(struct super_block *sb, unsigned long blocknr,
 	block_low = blocknr;
 	block_high = blocknr + num_blocks - 1;
 
-	if(num_blocks == 1 && log_page == 0) {
-		pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
-		to_be_free_idx = sbi->blocknr_to_entry[block_low];
-		if(to_be_free_idx >= 0) {
-			pentry = pentries + to_be_free_idx;
-			--pentry->refcount;
-			nova_flush_buffer(pentry, sizeof(*pentry), true);
-			if(pentry->refcount != 0) {
-				ret = 0;
-				goto out;
-			}
-			sbi->blocknr_to_entry[block_low] = -1;
-			weak_idx = (pentry->fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
-			weak_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &pentry->fp_weak);
-			if(weak_hentry){ 
-				hlist_del(&weak_hentry->node);
-				kmem_cache_free(sbi->nova_hentry_cachep, weak_hentry);
-			}
-			strong_idx = (pentry->fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
-			strong_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &pentry->fp_strong);
-			if(strong_hentry){
-				 hlist_del(&strong_hentry->node);
-				 kmem_cache_free(sbi->nova_hentry_cachep, strong_hentry);
-			}
-			nova_free_entry(sb, to_be_free_idx);
-		}
-	}
 
 	nova_dbgv("Free: %lu - %lu\n", block_low, block_high);
 
@@ -541,6 +509,12 @@ int nova_free_data_blocks(struct super_block *sb,
 	struct nova_inode_info_header *sih, unsigned long blocknr, int num)
 {
 	int ret;
+	struct nova_sb_info *sbi = NOVA_SB(sb);
+	int64_t to_be_free_idx = 0;
+	struct nova_pmm_entry *pentry, *pentries;
+	u32 weak_idx;
+	u64 strong_idx;
+	struct nova_hentry *weak_hentry, *strong_hentry;
 	INIT_TIMING(free_time);
 
 	nova_dbgv("Inode %lu: free %d data block from %lu to %lu\n",
@@ -550,6 +524,34 @@ int nova_free_data_blocks(struct super_block *sb,
 		return -EINVAL;
 	}
 	NOVA_START_TIMING(free_data_t, free_time);
+	if(sih->i_blk_type == NOVA_BLOCK_TYPE_4K) {
+		pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
+		to_be_free_idx = sbi->blocknr_to_entry[blocknr];
+		if(to_be_free_idx >= 0) {
+			pentry = pentries + to_be_free_idx;
+			if(pentry->refcount > 1) {
+				--pentry->refcount;
+				nova_flush_buffer(pentry, sizeof(pentry), true);
+				return 0;
+			}
+			pentry->refcount = 0;
+			nova_flush_buffer(pentry, sizeof(pentry), true);
+			sbi->blocknr_to_entry[blocknr] = -1;
+			nova_free_entry(sb, to_be_free_idx);
+			weak_idx = (pentry->fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
+			weak_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &pentry->fp_weak);
+			if(weak_hentry){ 
+				hlist_del(&weak_hentry->node);
+				kmem_cache_free(sbi->nova_hentry_cachep, weak_hentry);
+			}
+			strong_idx = (pentry->fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
+			strong_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &pentry->fp_strong);
+			if(strong_hentry){
+				 hlist_del(&strong_hentry->node);
+				 kmem_cache_free(sbi->nova_hentry_cachep, strong_hentry);
+			}
+		}
+	}
 	ret = nova_free_blocks(sb, blocknr, num, sih->i_blk_type, 0);
 	if (ret) {
 		nova_err(sb, "Inode %lu: free %d data block from %lu to %lu "
