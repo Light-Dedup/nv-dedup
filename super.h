@@ -195,6 +195,7 @@ struct nova_sb_info {
 	u32 dedup_mode;
 	struct task_struct *calc_non_fin_thread;
 	wait_queue_head_t calc_non_fin_wait;
+	int should_non_fin_thread_done;
 	struct kmem_cache *nova_hentry_cachep;
 };
 

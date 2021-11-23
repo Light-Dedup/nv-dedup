@@ -86,19 +86,24 @@ void nova_free_entry_list(struct super_block *sb)
 int nova_calc_non_fin_stop(struct super_block *sb)
 {
     struct nova_sb_info *sbi = NOVA_SB(sb);
-
-    if(sbi->calc_non_fin_thread)
+    
+    nova_info("%s is called", __func__);
+    if(sbi->calc_non_fin_thread) {
+        sbi->should_non_fin_thread_done = 1;
         kthread_stop(sbi->calc_non_fin_thread);
-
+    }
+    nova_info("%s goes end", __func__);
     return 0;
 }
 
 static void calc_non_fin_try_sleeping(struct nova_sb_info *sbi)
 {
     DEFINE_WAIT(wait);
+    nova_info("%s is called", __func__);
     prepare_to_wait(&sbi->calc_non_fin_wait, &wait, TASK_INTERRUPTIBLE);
     schedule();
     finish_wait(&sbi->calc_non_fin_wait, &wait);
+    nova_info("%s is end", __func__);
 }
 
 static int nova_calc_non_fin(struct super_block *sb)
@@ -149,6 +154,10 @@ static int calc_non_fin(void *arg)
             break;
         
         nova_calc_non_fin(sb);
+        
+        if (sbi->should_non_fin_thread_done) {
+            break;
+        }
     }
     nova_dbg("Exiting calc non fin thread\n");
 
@@ -170,7 +179,7 @@ int nova_calc_non_fin_thread_init(struct super_block *sb)
         nova_info("Failed to start NOVA non_fin calculator thread.\n");
 		ret = -1;
     }
-
+    sbi->should_non_fin_thread_done = 0;
     nova_info("Start NOVA non_fin calculator thread.\n");
     return ret;
 }
@@ -178,7 +187,7 @@ int nova_calc_non_fin_thread_init(struct super_block *sb)
 void wakeup_calc_non_fin(struct super_block *sb)
 {
     struct nova_sb_info *sbi = NOVA_SB(sb);
-
+    
     if(!waitqueue_active(&sbi->calc_non_fin_wait))
         return;
     nova_dbg("waking up the calc non fin thread");
