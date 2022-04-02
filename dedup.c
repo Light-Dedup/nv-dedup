@@ -185,7 +185,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
     struct nova_pmm_entry *pentries, *weak_entry, *strong_entry, *pentry;
     struct nova_hentry *weak_hentry, *strong_hentry;
     u32 weak_idx;
-    u64 strong_idx, entry_strong_idx;
+    u64 strong_idx;
     struct nova_hentry *weak_find_hentry, *strong_find_hentry;
     entrynr_t alloc_entry;
     int allocated = 0;
@@ -228,21 +228,21 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
         }else if(weak_entry->flag == FP_WEAK_FLAG){
             kmem = nova_get_block(sb, weak_entry->blocknr);
             NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
-            nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, kmem, &fp_strong);
+            nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, kmem, &entry_fp_strong);
             NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
             
             weak_entry->flag = FP_STRONG_FLAG;
-            weak_entry->fp_strong = fp_strong;
+            weak_entry->fp_strong = entry_fp_strong;
             flush_entry = true;
             
             weak_hentry = nova_alloc_hentry(sb);
             weak_hentry->entrynr = weak_find_hentry->entrynr;
-            strong_idx = hash_64(fp_strong.u64s[0],sbi->num_entries_bits);
+            strong_idx = (entry_fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
             hlist_add_head(&weak_hentry->node, &sbi->strong_hash_table[strong_idx]);
         }
 
         NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
-        nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, data_buffer, &entry_fp_strong);
+        nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, data_buffer, &fp_strong);
         NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
 
         if(cmp_fp_strong(&fp_strong, &entry_fp_strong)) {
@@ -253,8 +253,8 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
             allocated = 1;
         } else {
             NOVA_START_TIMING(hash_table_t, hash_table_time);
-            entry_strong_idx = hash_64(entry_fp_strong.u64s[0],sbi->num_entries_bits);
-            strong_find_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[entry_strong_idx], &entry_fp_strong);
+            strong_idx = (fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
+            strong_find_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &fp_strong);
             NOVA_END_TIMING(hash_table_t, hash_table_time);
             
             if(strong_find_hentry) {
@@ -278,13 +278,13 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
                 pentry = pentries + alloc_entry;
                 pentry->flag = FP_STRONG_FLAG;
                 pentry->fp_weak = fp_weak;
-                pentry->fp_strong = entry_fp_strong;
+                pentry->fp_strong = fp_strong;
                 pentry->blocknr = *blocknr;
                 pentry->refcount = 1;
                 nova_flush_buffer(pentry, sizeof(*pentry), true);
                 strong_hentry = nova_alloc_hentry(sb);
                 strong_hentry->entrynr = alloc_entry;
-                hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[entry_strong_idx]);
+                hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
                 sbi->blocknr_to_entry[*blocknr] = alloc_entry;
             }
         }
