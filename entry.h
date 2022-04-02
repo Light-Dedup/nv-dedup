@@ -22,11 +22,11 @@ struct nova_pmm_entry {
 
 _Static_assert(sizeof(struct nova_pmm_entry) == 64, "Metadata Entry not 64B!");
 
-// struct nova_entry_node
-// {
-//     struct list_head link;
-//     entrynr_t entrynr;
-// };
+struct nova_entry_node
+{
+    struct list_head link;
+    entrynr_t entrynr;
+};
 
 extern entrynr_t nova_alloc_entry(struct super_block *sb);
 extern int nova_init_entry_list(struct super_block *sb);

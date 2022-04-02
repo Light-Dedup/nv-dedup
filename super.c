@@ -998,7 +998,10 @@ static void nova_put_super(struct super_block *sb)
 //	nova_print_free_lists(sb);
 	if (sbi->virt_addr) {
 		nova_save_snapshots(sb);
+		//! This might not work since the thread has been waken
+		wakeup_calc_non_fin(sb);
 		nova_calc_non_fin_stop(sb);
+		
 		kmem_cache_free(nova_inode_cachep, sbi->snapshot_si);
 		nova_save_inode_list_to_log(sb);
 		/* Save everything before blocknode mapping! */
