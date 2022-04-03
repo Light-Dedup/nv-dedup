@@ -16,7 +16,7 @@ int nova_alloc_block_write(struct super_block *sb,const char *data_buffer, unsig
     void *kmem;
 	INIT_TIMING(memcpy_time);
 
-    allocated = nova_new_data_block(sb, blocknr ,ALLOC_INIT_ZERO);
+    allocated = nova_new_data_block(sb, blocknr ,ALLOC_NO_INIT);
 
 	nova_dbg_verbose("%s: alloc %d blocks @ %lu\n", __func__,
 					allocated, *blocknr);
