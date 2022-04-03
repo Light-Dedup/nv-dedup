@@ -89,7 +89,7 @@ struct nova_super_block {
 #define NOVA_NORMAL_INODE_START      (32)
 
 
-#define HASH_TABLE_LOCK_BITS 0
+#define HASH_TABLE_LOCK_BITS 6
 #define HASH_TABLE_LOCK_NUM (1 << HASH_TABLE_LOCK_BITS)
 
 /*
