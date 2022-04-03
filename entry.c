@@ -124,6 +124,7 @@ static int nova_calc_non_fin(struct super_block *sb)
             if(pentry->blocknr != 0 && pentry->blocknr < sbi->num_blocks && sbi->blocknr_to_entry[pentry->blocknr] == idx) {
                 kmem = nova_get_block(sb, pentry->blocknr);
                 nova_fp_weak_calc(&sbi->nova_non_fin_calc_ctx, kmem, &fp_weak);
+                pentry->flag = FP_WEAK_FLAG;
                 pentry->fp_weak = fp_weak;
                 nova_flush_buffer(pentry, sizeof(*pentry), true);
                 weak_idx = (fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
