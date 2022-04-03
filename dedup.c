@@ -47,7 +47,7 @@ struct nova_hentry *nova_alloc_hentry(struct super_block *sb)
     struct nova_sb_info *sbi = NOVA_SB(sb);
     struct nova_hentry *hentry;
 
-    hentry = kmem_cache_zalloc(sbi->nova_hentry_cachep, GFP_KERNEL);
+    hentry = kmem_cache_zalloc(sbi->nova_hentry_cachep, GFP_ATOMIC);
     if(unlikely(!hentry))
         return NULL;
     INIT_HLIST_NODE(&hentry->node);
@@ -125,13 +125,15 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
     nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, data_buffer, &fp_strong);
     NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
 
-    NOVA_START_TIMING(hash_table_t, hash_table_time);
     weak_idx = (fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
+	spin_lock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
+    NOVA_START_TIMING(hash_table_t, hash_table_time);
     weak_find_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &fp_weak);
     NOVA_END_TIMING(hash_table_t, hash_table_time);
     
-    NOVA_START_TIMING(hash_table_t, hash_table_time);
     strong_idx = (fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
+	spin_lock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
+    NOVA_START_TIMING(hash_table_t, hash_table_time);
     strong_find_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &fp_strong);
     NOVA_END_TIMING(hash_table_t, hash_table_time);
 
@@ -172,6 +174,8 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
     }
 
 out:
+	spin_unlock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
+	spin_unlock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
     return allocated;
 }
 
@@ -204,8 +208,9 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
     nova_fp_weak_calc(&sbi->nova_fp_weak_ctx, data_buffer,&fp_weak);
     NOVA_END_TIMING(weak_fp_calc_t, weak_fp_calc_time);
 
-    NOVA_START_TIMING(hash_table_t, hash_table_time);
     weak_idx = (fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
+	spin_lock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
+    NOVA_START_TIMING(hash_table_t, hash_table_time);
     weak_find_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &fp_weak);
     NOVA_END_TIMING(hash_table_t, hash_table_time);
 
@@ -240,7 +245,9 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
             weak_hentry = nova_alloc_hentry(sb);
             weak_hentry->entrynr = weak_find_hentry->entrynr;
             strong_idx = (entry_fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
+	        spin_lock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
             hlist_add_head(&weak_hentry->node, &sbi->strong_hash_table[strong_idx]);
+	        spin_unlock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
         }
 
         NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
@@ -254,8 +261,9 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
             ++sbi->dup_block;
             allocated = 1;
         } else {
-            NOVA_START_TIMING(hash_table_t, hash_table_time);
             strong_idx = (fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
+	        spin_lock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
+            NOVA_START_TIMING(hash_table_t, hash_table_time);
             strong_find_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &fp_strong);
             NOVA_END_TIMING(hash_table_t, hash_table_time);
             
@@ -274,8 +282,10 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
                 // add the strong fingerprint to strong fingerprint hash table
                 alloc_entry = nova_alloc_entry(sb);
                 allocated = nova_alloc_block_write(sb,data_buffer,blocknr);
-                if(allocated < 0)
+                if(allocated < 0) {
+	                spin_unlock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
                     goto out;
+                }
                 
                 pentry = pentries + alloc_entry;
                 pentry->flag = FP_STRONG_FLAG;
@@ -289,6 +299,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
                 hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
                 sbi->blocknr_to_entry[*blocknr] = alloc_entry;
             }
+	        spin_unlock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
         }
 
         if(flush_entry) nova_flush_buffer(weak_entry, sizeof(*weak_entry), true);
@@ -320,6 +331,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
     }
 
 out:
+	spin_unlock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
     return allocated;
 }
 

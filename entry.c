@@ -14,11 +14,11 @@ entrynr_t nova_alloc_entry(struct super_block *sb)
     struct nova_sb_info *sbi = NOVA_SB(sb);
     struct nova_entry_node *alloc_entry;
 
-    mutex_lock(&sbi->free_list_mutex);
+    spin_lock(&sbi->free_list_lock);
     alloc_entry = list_first_entry(&sbi->meta_free_list,struct nova_entry_node, link);
     list_del(&alloc_entry->link);
     entrynr = alloc_entry->entrynr;
-    mutex_unlock(&sbi->free_list_mutex);
+    spin_unlock(&sbi->free_list_lock);
 
     return entrynr;
 }
@@ -32,10 +32,10 @@ int nova_free_entry(struct super_block *sb, entrynr_t entrynr)
     struct nova_sb_info *sbi = NOVA_SB(sb);
     struct nova_entry_node *free_entry;
     
-    mutex_lock(&sbi->free_list_mutex);
+    spin_lock(&sbi->free_list_lock);
     free_entry = &sbi->free_list_buf[entrynr];
     list_add_tail(&free_entry->link,&sbi->meta_free_list);
-    mutex_unlock(&sbi->free_list_mutex);
+    spin_unlock(&sbi->free_list_lock);
 
     return 0;
 }
@@ -58,7 +58,7 @@ int nova_init_entry_list(struct super_block *sb){
     }
 
     INIT_LIST_HEAD(&sbi->meta_free_list);
-    mutex_init(&sbi->free_list_mutex);
+    spin_lock_init(&sbi->free_list_lock);
 
 
     for(i = 0; i < sbi->num_blocks; ++i) {
@@ -129,7 +129,9 @@ static int nova_calc_non_fin(struct super_block *sb)
                 weak_idx = (fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
                 hentry = nova_alloc_hentry(sb);
                 hentry->entrynr = idx;
+	            spin_lock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
                 hlist_add_head(&hentry->node, &sbi->weak_hash_table[weak_idx]);
+	            spin_unlock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
                 // sbi->weak_hash_table[weak_idx] = idx;
             }
         }

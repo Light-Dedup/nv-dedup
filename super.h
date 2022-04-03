@@ -89,6 +89,8 @@ struct nova_super_block {
 #define NOVA_NORMAL_INODE_START      (32)
 
 
+#define HASH_TABLE_LOCK_BITS 0
+#define HASH_TABLE_LOCK_NUM (1 << HASH_TABLE_LOCK_BITS)
 
 /*
  * NOVA super-block data in DRAM
@@ -183,11 +185,13 @@ struct nova_sb_info {
 	unsigned long	metadata_start;
 	struct nova_entry_node *free_list_buf;
 	struct list_head meta_free_list;
-	struct mutex free_list_mutex;
+	struct spinlock free_list_lock;
 	unsigned long num_entries_blocks;
 	unsigned long num_entries;
 	unsigned int num_entries_bits;
+	struct spinlock weak_hash_table_locks[HASH_TABLE_LOCK_NUM];
 	struct hlist_head *weak_hash_table;
+	struct spinlock strong_hash_table_locks[HASH_TABLE_LOCK_NUM];
 	struct hlist_head *strong_hash_table;
 	int64_t *blocknr_to_entry;
 	u32 dup_block;

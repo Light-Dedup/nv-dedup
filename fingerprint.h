@@ -62,7 +62,7 @@ static inline int nova_fp_strong_calc(struct nova_fp_hash_ctx *fp_ctx, const voi
 	int ret;
 
 	shash_desc = kmalloc(sizeof(struct shash_desc) +
-		crypto_shash_descsize(fp_ctx->alg), GFP_KERNEL);
+		crypto_shash_descsize(fp_ctx->alg), GFP_ATOMIC);
 	if (shash_desc == NULL)
 		return -ENOMEM;
 	shash_desc->tfm = fp_ctx->alg;
@@ -78,7 +78,7 @@ static inline int nova_fp_weak_calc(struct nova_fp_hash_ctx *fp_ctx, const void 
 	int ret;
 
 	shash_desc = kmalloc(sizeof(struct shash_desc) +
-		crypto_shash_descsize(fp_ctx->alg), GFP_KERNEL);
+		crypto_shash_descsize(fp_ctx->alg), GFP_ATOMIC);
 	if (shash_desc == NULL)
 		return -ENOMEM;
 	shash_desc->tfm = fp_ctx->alg;

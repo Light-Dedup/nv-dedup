@@ -401,7 +401,7 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	u64 epoch_id;
 	int retval;
 	size_t sz;
-	unsigned long i_hlist = 0;
+	unsigned long i = 0;
 	INIT_TIMING(init_time);
 
 	NOVA_START_TIMING(new_init_t, init_time);
@@ -424,7 +424,11 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	sbi->num_entries = ( sbi->num_entries_blocks << PAGE_SHIFT ) / sizeof(struct nova_pmm_entry) ;
 	sbi->num_entries_bits = 32 - __builtin_clz(sbi->num_entries);
 	sz = 1 << sbi->num_entries_bits;
+	for (i = 0; i < HASH_TABLE_LOCK_NUM; ++i)
+		spin_lock_init(sbi->weak_hash_table_locks + i);
 	sbi->weak_hash_table = vzalloc(sizeof(struct hlist_head) * sz);
+	for (i = 0; i < HASH_TABLE_LOCK_NUM; ++i)
+		spin_lock_init(sbi->strong_hash_table_locks + i);
 	sbi->strong_hash_table = vzalloc(sizeof(struct hlist_head) * sz);
 	sbi->blocknr_to_entry = vzalloc(sizeof(u64) * sz);
 	memset(sbi->blocknr_to_entry, -1, sizeof(*sbi->blocknr_to_entry));
@@ -433,9 +437,9 @@ static struct nova_inode *nova_init(struct super_block *sb,
 	nova_info("sbi->dup_block : %u sbi->dedup_mode: %u SAMPLE_BLOCK: %u NON_FIN: %u STR_FIN:%u", sbi->dup_block, NON_FIN, SAMPLE_BLOCK, NON_FIN_THRESH, STR_FIN_THRESH);
 	// nova_dbg("sbi->num_entries:%lu sbi->num_entries_bits:%lu",sbi->num_entries,sbi->num_entries_bits);
 
-	for(i_hlist = 0; i_hlist < sz; ++i_hlist) {
-		INIT_HLIST_HEAD(&sbi->weak_hash_table[i_hlist]);
-		INIT_HLIST_HEAD(&sbi->strong_hash_table[i_hlist]);
+	for(i = 0; i < sz; ++i) {
+		INIT_HLIST_HEAD(&sbi->weak_hash_table[i]);
+		INIT_HLIST_HEAD(&sbi->strong_hash_table[i]);
 	}
 	
 	/**
