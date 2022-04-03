@@ -99,11 +99,11 @@ int nova_calc_non_fin_stop(struct super_block *sb)
 static void calc_non_fin_try_sleeping(struct nova_sb_info *sbi)
 {
     DEFINE_WAIT(wait);
-    nova_info("%s is called", __func__);
+    // nova_info("%s is called", __func__);
     prepare_to_wait(&sbi->calc_non_fin_wait, &wait, TASK_INTERRUPTIBLE);
     schedule();
     finish_wait(&sbi->calc_non_fin_wait, &wait);
-    nova_info("%s is end", __func__);
+    // nova_info("%s is end", __func__);
 }
 
 static int nova_calc_non_fin(struct super_block *sb)
@@ -190,6 +190,6 @@ void wakeup_calc_non_fin(struct super_block *sb)
     
     if(!waitqueue_active(&sbi->calc_non_fin_wait))
         return;
-    nova_dbg("waking up the calc non fin thread");
+    // nova_dbg("waking up the calc non fin thread");
     wake_up_interruptible(&sbi->calc_non_fin_wait);
 }
