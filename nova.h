@@ -602,8 +602,7 @@ static inline u64 nova_find_nvmm_block(struct super_block *sb,
 	 * when called from reset_vma_csum_parity
 	 */
 	entryc = &entry_copy;
-	if (memcpy_mcsafe(entryc, entry,
-			sizeof(struct nova_file_write_entry)) < 0)
+	if (memcpy_mcsafe(entryc, entry, sizeof(struct nova_file_write_entry)))
 		return 0;
 
 	nvmm = get_nvmm(sb, sih, entryc, blocknr);
