@@ -15,7 +15,9 @@ int nova_alloc_block_write(struct super_block *sb,const char *data_buffer, unsig
     int allocated = 0;
     void *kmem;
 	INIT_TIMING(memcpy_time);
+    INIT_TIMING(block_alloc_write_time);
 
+    NOVA_START_TIMING(nv_dedup_alloc_write_t, block_alloc_write_time);
     allocated = nova_new_data_block(sb, blocknr ,ALLOC_NO_INIT);
 
 	nova_dbg_verbose("%s: alloc %d blocks @ %lu\n", __func__,
@@ -35,6 +37,7 @@ int nova_alloc_block_write(struct super_block *sb,const char *data_buffer, unsig
 	nova_memlock_range(sb, kmem , PAGE_SIZE);
 	NOVA_END_TIMING(memcpy_w_nvmm_t, memcpy_time);
 
+    NOVA_END_TIMING(nv_dedup_alloc_write_t, block_alloc_write_time);
 out:
     return allocated;
 }
@@ -214,7 +217,6 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
          */
 
         weak_entry = pentries + weak_find_hentry->entrynr;
-        
         if(weak_entry->flag == FP_STRONG_FLAG) {
              /**
             *  The sixth field is a 1 B flag to indicate 
@@ -226,7 +228,7 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
 
            entry_fp_strong = weak_entry->fp_strong;
         }else if(weak_entry->flag == FP_WEAK_FLAG){
-            kmem = nova_get_block(sb, weak_entry->blocknr);
+            kmem = nova_get_block(sb, nova_get_block_off(sb, weak_entry->blocknr, NOVA_BLOCK_TYPE_4K));
             NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
             nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, kmem, &entry_fp_strong);
             NOVA_END_TIMING(strong_fp_calc_t, strong_fp_calc_time);
@@ -350,6 +352,8 @@ int nova_dedup_new_write(struct super_block *sb,const char* data_buffer, unsigne
     u32 dup_block = 0;
     u32 dup_mode = 0;
     unsigned long randomNum;
+    int allocated;
+    INIT_TIMING(calc_t);
 
     ++sbi->cur_block;
     if(sbi->cur_block >= SAMPLE_BLOCK) {
@@ -373,15 +377,26 @@ int nova_dedup_new_write(struct super_block *sb,const char* data_buffer, unsigne
         sbi->cur_block = 0;
         sbi->dup_block = 0;
     }
-
+    
     dup_mode = sbi->dedup_mode;
     if(dup_mode & NON_FIN) {
-        return nova_dedup_non_fin(sb, data_buffer, blocknr);
+        NOVA_START_TIMING(non_fin_calc_t, calc_t);
+        allocated = nova_dedup_non_fin(sb, data_buffer, blocknr);
+        NOVA_END_TIMING(non_fin_calc_t, calc_t);
+        goto out;
     }else if(dup_mode & WEAK_STR_FIN) {
-        return nova_dedup_weak_str_fin(sb, data_buffer, blocknr);
+        NOVA_START_TIMING(ws_fin_calc_t, calc_t);
+        allocated = nova_dedup_weak_str_fin(sb, data_buffer, blocknr);
+        NOVA_END_TIMING(ws_fin_calc_t, calc_t);
+        goto out;
     }else if(dup_mode & STR_FIN) {
-        return nova_dedup_str_fin(sb, data_buffer, blocknr);
+        NOVA_START_TIMING(str_fin_calc_t, calc_t);
+        allocated = nova_dedup_str_fin(sb, data_buffer, blocknr);
+        NOVA_END_TIMING(str_fin_calc_t, calc_t);
+        goto out;
     }else {
         return -ESRCH;
     }
+out:
+    return allocated;
 }

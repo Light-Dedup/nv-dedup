@@ -168,6 +168,10 @@ enum timing_category {
 	strong_fp_calc_t,
 	weak_fp_calc_t,
 	hash_table_t,
+	nv_dedup_alloc_write_t,
+	non_fin_calc_t,
+	ws_fin_calc_t,
+	str_fin_calc_t,
 
 	/* Sentinel */
 	TIMING_NUM,

@@ -165,6 +165,10 @@ const char *Timingstring[TIMING_NUM] = {
 	"strong_fingerprint_calculation",
 	"weak_fingerprint_calculation",
 	"hash_table_find",
+	"real_block_write",
+	"non_fin_calc",
+	"ws_fin_calc",
+	"str_fin_calc"
 };
 
 u64 Timingstats[TIMING_NUM];
