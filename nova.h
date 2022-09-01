@@ -576,7 +576,7 @@ static inline unsigned long get_nvmm(struct super_block *sb,
 			curr, pgoff, entry->pgoff, entry->num_pages);
 		nova_print_nova_log_pages(sb, sih);
 		nova_print_nova_log(sb, sih);
-		NOVA_ASSERT(0);
+		BUG_ON(1);
 	}
 
 	return (unsigned long) (entry->block >> PAGE_SHIFT) + pgoff
@@ -999,6 +999,9 @@ int nova_check_overlap_vmas(struct super_block *sb,
 int nova_handle_head_tail_blocks(struct super_block *sb,
 				 struct inode *inode, loff_t pos,
 				 size_t count, void *kmem);
+int nova_handle_head_tail_blocks_in_buf(struct super_block *sb,
+				 struct inode *inode, loff_t pos, 
+				 size_t count, void *kbuf);
 int nova_protect_file_data(struct super_block *sb, struct inode *inode,
 	loff_t pos, size_t count, const char __user *buf, unsigned long blocknr,
 	bool inplace);

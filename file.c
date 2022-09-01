@@ -648,7 +648,7 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 	u32 time;
 	char* data_buffer;
 
-	data_buffer = nova_alloc_data_buffer(sb);
+	data_buffer = (char *)kmalloc(PAGE_SIZE, GFP_KERNEL);
 
 
 	if (len == 0)
@@ -737,17 +737,12 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 		// kmem = nova_get_block(inode->i_sb,
 		// 	     nova_get_block_off(sb, blocknr, sih->i_blk_type));
 		
-		/**
-		 * Author:Hsiao
-		 * Since it's proof of concept
-		 * Handle_head_tail is not processed
-		 */
-		// if (offset || ((offset + bytes) & (PAGE_SIZE - 1)) != 0)  {
-		// 	ret = nova_handle_head_tail_blocks(sb, inode, pos,
-		// 					   bytes, kmem);
-		// 	if (ret)
-		// 		goto out;
-		// }
+		if (offset || ((offset + bytes) & (PAGE_SIZE - 1)) != 0)  {
+			ret = nova_handle_head_tail_blocks_in_buf(sb, inode, pos,
+							   bytes, data_buffer);
+			if (ret)
+				goto out;
+		}
 		/* Now copy from user buf */
 		//		nova_dbg("Write: %p\n", kmem);
 		if( copy_from_user(data_buffer + offset, buf, bytes) ) {
@@ -845,7 +840,7 @@ static ssize_t do_nova_cow_file_write(struct file *filp,
 	sih->trans_id++;
 out:
 	if(data_buffer)
-		nova_free_data_buffer(data_buffer);
+		kfree(data_buffer);
 	if (ret < 0)
 		nova_cleanup_incomplete_write(sb, sih, blocknr, allocated,
 						begin_tail, update.tail);
