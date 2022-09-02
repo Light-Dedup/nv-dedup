@@ -103,12 +103,14 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
     struct nova_sb_info *sbi = NOVA_SB(sb);
     struct nova_fp_weak fp_weak;
     struct nova_fp_strong fp_strong = {0} ;
+    struct nova_fp_strong entry_fp_strong = {0} ;
     struct nova_pmm_entry *pentries, *pentry;
     u32 weak_idx;
     u64 strong_idx;
     struct nova_hentry *weak_find_hentry, *strong_find_hentry;
     struct nova_hentry *strong_hentry, *weak_hentry;
     entrynr_t alloc_entry,strong_find_entry;
+    char *kmem;
     int allocated = 0;
     // void *kmem;
     INIT_TIMING(weak_fp_calc_time);
@@ -147,22 +149,60 @@ int nova_dedup_str_fin(struct super_block *sb, const char* data_buffer,unsigned 
         allocated = 1;
         strong_find_entry = strong_find_hentry->entrynr;
     }else {
-        alloc_entry = nova_alloc_entry(sb);
-        allocated = nova_alloc_block_write(sb,data_buffer,blocknr);
-        if(allocated < 0) 
-            goto out;
+        /* handle the situation */
+        if (weak_find_hentry) {
+            pentry = pentries + weak_find_hentry->entrynr;
+            kmem = nova_get_block(sb, nova_get_block_off(sb, pentry->blocknr, NOVA_BLOCK_TYPE_4K));
+            nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, kmem, &entry_fp_strong);
+            if (cmp_fp_strong(&entry_fp_strong, &fp_strong)) {
+                pentry->fp_strong = entry_fp_strong;
+                ++pentry->refcount;
+                pentry->flag = FP_STRONG_FLAG;
+                ++sbi->dup_block;
+                *blocknr = pentry->blocknr;
+                allocated = 1;
+                strong_hentry = nova_alloc_hentry(sb);
+                strong_hentry->entrynr = weak_find_hentry->entrynr;
+                hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
+                strong_find_entry = weak_find_hentry->entrynr;
+            }
+            else {
+                alloc_entry = nova_alloc_entry(sb);
+                allocated = nova_alloc_block_write(sb,data_buffer,blocknr);
+                if(allocated < 0) 
+                    goto out;
 
-        pentry = pentries + alloc_entry;
-        pentry->flag = FP_STRONG_FLAG;
-        pentry->blocknr = *blocknr;
-        pentry->fp_strong = fp_strong;
-        pentry->fp_weak = fp_weak;
-        pentry->refcount = 1;
-        strong_hentry = nova_alloc_hentry(sb);
-        strong_hentry->entrynr = alloc_entry;
-        hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
-        sbi->blocknr_to_entry[*blocknr] = alloc_entry;
-        strong_find_entry = alloc_entry;
+                pentry = pentries + alloc_entry;
+                pentry->flag = FP_STRONG_FLAG;
+                pentry->blocknr = *blocknr;
+                pentry->fp_strong = fp_strong;
+                pentry->fp_weak = fp_weak;
+                pentry->refcount = 1;
+                strong_hentry = nova_alloc_hentry(sb);
+                strong_hentry->entrynr = alloc_entry;
+                hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
+                sbi->blocknr_to_entry[*blocknr] = alloc_entry;
+                strong_find_entry = alloc_entry;
+            }
+        }
+        else {
+            alloc_entry = nova_alloc_entry(sb);
+            allocated = nova_alloc_block_write(sb,data_buffer,blocknr);
+            if(allocated < 0) 
+                goto out;
+
+            pentry = pentries + alloc_entry;
+            pentry->flag = FP_STRONG_FLAG;
+            pentry->blocknr = *blocknr;
+            pentry->fp_strong = fp_strong;
+            pentry->fp_weak = fp_weak;
+            pentry->refcount = 1;
+            strong_hentry = nova_alloc_hentry(sb);
+            strong_hentry->entrynr = alloc_entry;
+            hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
+            sbi->blocknr_to_entry[*blocknr] = alloc_entry;
+            strong_find_entry = alloc_entry;
+        }
     }
 
     nova_flush_buffer(pentry, sizeof(*pentry), true);
