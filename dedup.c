@@ -260,7 +260,6 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
          *  NV-Dedup calculates the strong fingerprint of both chunks for further comparison. 
          * Then, NV-Dedup updates the entry of the stored chunk by adding the strong fingerprint.
          */
-
         weak_entry = pentries + weak_find_hentry->entrynr;
         if(weak_entry->flag == FP_STRONG_FLAG) {
              /**
@@ -272,7 +271,8 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
            // assign it to entry_fp_strong
 
            entry_fp_strong = weak_entry->fp_strong;
-        }else if(weak_entry->flag == FP_WEAK_FLAG){
+        }
+        else if(weak_entry->flag == FP_WEAK_FLAG){
             kmem = nova_get_block(sb, nova_get_block_off(sb, weak_entry->blocknr, NOVA_BLOCK_TYPE_4K));
             NOVA_START_TIMING(strong_fp_calc_t, strong_fp_calc_time);
             nova_fp_strong_calc(&sbi->nova_fp_strong_ctx, kmem, &entry_fp_strong);
@@ -282,11 +282,11 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
             weak_entry->fp_strong = entry_fp_strong;
             flush_entry = true;
             
-            weak_hentry = nova_alloc_hentry(sb);
-            weak_hentry->entrynr = weak_find_hentry->entrynr;
+            strong_hentry = nova_alloc_hentry(sb);
+            strong_hentry->entrynr = weak_find_hentry->entrynr;
             strong_idx = (entry_fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
 	        spin_lock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
-            hlist_add_head(&weak_hentry->node, &sbi->strong_hash_table[strong_idx]);
+            hlist_add_head(&strong_hentry->node, &sbi->strong_hash_table[strong_idx]);
 	        spin_unlock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
         }
 
@@ -300,7 +300,8 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
             flush_entry = true;
             ++sbi->dup_block;
             allocated = 1;
-        } else {
+        } 
+        else {
             strong_idx = (fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
 	        spin_lock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
             NOVA_START_TIMING(hash_table_t, hash_table_time);
@@ -343,8 +344,8 @@ int nova_dedup_weak_str_fin(struct super_block *sb, const char* data_buffer, uns
         }
 
         if(flush_entry) nova_flush_buffer(weak_entry, sizeof(*weak_entry), true);
-
-    }else {
+    }
+    else {
         /**
          * If the weak fingerprint is not found in the metadata table, 
          * NV-Dedup will deem the chunk to be non-existent 
@@ -383,6 +384,7 @@ int nova_dedup_non_fin(struct super_block *sb, const char* data_buffer, unsigned
     int allocated = 0;
     
     alloc_entry = nova_alloc_entry(sb);
+    spin_lock(sbi->non_dedup_fp_locks + alloc_entry % NON_DEDUP_FP_LOCK_NUM);
     allocated = nova_alloc_block_write(sb, data_buffer,blocknr);
     if(allocated < 0)
         goto out;
@@ -393,6 +395,7 @@ int nova_dedup_non_fin(struct super_block *sb, const char* data_buffer, unsigned
     pentry->refcount = 1;
     nova_flush_buffer(pentry, sizeof(*pentry), true);
     sbi->blocknr_to_entry[*blocknr] = alloc_entry;
+    spin_unlock(sbi->non_dedup_fp_locks + alloc_entry % NON_DEDUP_FP_LOCK_NUM);
 
 out:
     return allocated;
@@ -429,7 +432,7 @@ int nova_dedup_new_write(struct super_block *sb,const char* data_buffer, unsigne
         sbi->cur_block = 0;
         sbi->dup_block = 0;
     }
-    
+
     dup_mode = sbi->dedup_mode;
     if(dup_mode & NON_FIN) {
         NOVA_START_TIMING(non_fin_calc_t, calc_t);

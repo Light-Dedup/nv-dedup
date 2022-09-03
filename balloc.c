@@ -510,12 +510,15 @@ int nova_free_data_blocks(struct super_block *sb,
 {
 	int ret;
 	struct nova_sb_info *sbi = NOVA_SB(sb);
-	int64_t to_be_free_idx = 0;
 	struct nova_pmm_entry *pentry, *pentries;
 	u32 weak_idx;
 	u64 strong_idx;
-	struct nova_hentry *weak_hentry, *strong_hentry;
+	int64_t to_be_free_idx = 0;
+	// struct nova_hentry *weak_hentry, *strong_hentry;
+	struct nova_hentry *weak_find_hentry, *strong_find_hentry;
+	bool is_free = false;
 	INIT_TIMING(free_time);
+    INIT_TIMING(hash_table_time);
 
 	nova_dbgv("Inode %lu: free %d data block from %lu to %lu\n",
 			sih->ino, num, blocknr, blocknr + num - 1);
@@ -526,36 +529,51 @@ int nova_free_data_blocks(struct super_block *sb,
 	NOVA_START_TIMING(free_data_t, free_time);
 	if(sih->i_blk_type == NOVA_BLOCK_TYPE_4K) {
 		pentries = nova_get_block(sb, nova_get_block_off(sb, sbi->metadata_start, NOVA_BLOCK_TYPE_4K));
+		// kmem = nova_get_block(sb, nova_get_block_off(sb, blocknr, NOVA_BLOCK_TYPE_4K));
 		to_be_free_idx = sbi->blocknr_to_entry[blocknr];
-		if(to_be_free_idx >= 0) {
+		if (to_be_free_idx >= 0) {
+			/* an entry's refcount is never changed */
 			pentry = pentries + to_be_free_idx;
-			if(pentry->refcount > 1) {
-				--pentry->refcount;
-				nova_flush_buffer(pentry, sizeof(pentry), true);
-				return 0;
-			}
-			pentry->refcount = 0;
-			nova_flush_buffer(pentry, sizeof(pentry), true);
-			sbi->blocknr_to_entry[blocknr] = -1;
-			nova_free_entry(sb, to_be_free_idx);
-
+			spin_lock(sbi->non_dedup_fp_locks + to_be_free_idx % NON_DEDUP_FP_LOCK_NUM);
+			/* NOTE: pentry->fp_weak could be changed by calc_no_fin thread  */
 			weak_idx = (pentry->fp_weak.u32 & ((1 << sbi->num_entries_bits) - 1));
+			strong_idx = (pentry->fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
+
 			spin_lock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
-			weak_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &pentry->fp_weak);
-			if(weak_hentry){ 
-				hlist_del(&weak_hentry->node);
-				kmem_cache_free(sbi->nova_hentry_cachep, weak_hentry);
+			NOVA_START_TIMING(hash_table_t, hash_table_time);
+			weak_find_hentry = nova_find_in_weak_hlist(sb, &sbi->weak_hash_table[weak_idx], &pentry->fp_weak);
+			NOVA_END_TIMING(hash_table_t, hash_table_time);
+			
+			spin_lock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
+			NOVA_START_TIMING(hash_table_t, hash_table_time);
+			strong_find_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &pentry->fp_strong);
+			NOVA_END_TIMING(hash_table_t, hash_table_time);
+
+			--pentry->refcount;
+			if (pentry->refcount == 0) {
+				is_free = true;
+				if (strong_find_hentry) {
+					if (strong_find_hentry->entrynr == to_be_free_idx) {
+						hlist_del(&strong_find_hentry->node);
+						kmem_cache_free(sbi->nova_hentry_cachep, strong_find_hentry);
+					}
+				}
+				if (weak_find_hentry) {
+					if (weak_find_hentry->entrynr == to_be_free_idx) {
+						hlist_del(&weak_find_hentry->node);
+						kmem_cache_free(sbi->nova_hentry_cachep, weak_find_hentry);
+					}
+				}
+				pentry->blocknr = 0;
+				pentry->flag = FP_FREE_FLAG;
+				nova_free_entry(sb, to_be_free_idx);
 			}
 			spin_unlock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
-
-			strong_idx = (pentry->fp_strong.u64s[0] & ((1 << sbi->num_entries_bits) - 1));
-			spin_lock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
-			strong_hentry = nova_find_in_strong_hlist(sb, &sbi->strong_hash_table[strong_idx], &pentry->fp_strong);
-			if(strong_hentry){
-				 hlist_del(&strong_hentry->node);
-				 kmem_cache_free(sbi->nova_hentry_cachep, strong_hentry);
-			}
 			spin_unlock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);
+			spin_unlock(sbi->non_dedup_fp_locks + to_be_free_idx % NON_DEDUP_FP_LOCK_NUM);
+			if (!is_free) {
+				return 0;
+			} 
 		}
 	}
 	ret = nova_free_blocks(sb, blocknr, num, sih->i_blk_type, 0);
@@ -563,13 +581,12 @@ int nova_free_data_blocks(struct super_block *sb,
 		nova_err(sb, "Inode %lu: free %d data block from %lu to %lu "
 			 "failed!\n",
 			 sih->ino, num, blocknr, blocknr + num - 1);
-		nova_print_nova_log(sb, sih);
+		// nova_print_nova_log(sb, sih);
 	}
 	NOVA_END_TIMING(free_data_t, free_time);
 
 	return ret;
 }
-
 int nova_free_log_blocks(struct super_block *sb,
 	struct nova_inode_info_header *sih, unsigned long blocknr, int num)
 {

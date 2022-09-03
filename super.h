@@ -92,6 +92,8 @@ struct nova_super_block {
 #define HASH_TABLE_LOCK_BITS 6
 #define HASH_TABLE_LOCK_NUM (1 << HASH_TABLE_LOCK_BITS)
 
+#define NON_DEDUP_FP_LOCK_BITS 6
+#define NON_DEDUP_FP_LOCK_NUM (1 << NON_DEDUP_FP_LOCK_BITS)
 /*
  * NOVA super-block data in DRAM
  */
@@ -180,7 +182,8 @@ struct nova_sb_info {
 	unsigned long per_list_blocks;
 	struct nova_fp_hash_ctx nova_fp_strong_ctx;
 	struct nova_fp_hash_ctx nova_fp_weak_ctx;
-	struct nova_fp_hash_ctx nova_non_fin_calc_ctx;
+	struct nova_fp_hash_ctx nova_non_fin_calc_weak_ctx;
+	struct nova_fp_hash_ctx nova_non_fin_calc_str_ctx;
 
 	unsigned long	metadata_start;
 	struct nova_entry_node *free_list_buf;
@@ -194,6 +197,7 @@ struct nova_sb_info {
 	struct spinlock strong_hash_table_locks[HASH_TABLE_LOCK_NUM];
 	struct hlist_head *strong_hash_table;
 	int64_t *blocknr_to_entry;
+	struct spinlock non_dedup_fp_locks[HASH_TABLE_LOCK_NUM];
 	u32 dup_block;
 	u32 cur_block;
 	u32 dedup_mode;

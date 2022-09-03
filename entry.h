@@ -8,6 +8,7 @@ typedef uint64_t entrynr_t;
 #define NON_FIN_FLAG 0xFF
 #define FP_WEAK_FLAG 0xFE
 #define FP_STRONG_FLAG 0xEF
+#define FP_FREE_FLAG 0xEE
 
 struct nova_pmm_entry {
     uint64_t tag_TXID;

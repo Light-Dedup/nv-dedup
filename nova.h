@@ -359,6 +359,8 @@ static inline int nova_get_cpuid(struct super_block *sb)
 	struct nova_sb_info *sbi = NOVA_SB(sb);
 
 	return smp_processor_id() % sbi->cpus;
+	/* for debug purpose */
+	// return 0;
 }
 
 static inline u64 nova_get_epoch_id(struct super_block *sb)

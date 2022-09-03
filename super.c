@@ -431,7 +431,10 @@ static struct nova_inode *nova_init(struct super_block *sb,
 		spin_lock_init(sbi->strong_hash_table_locks + i);
 	sbi->strong_hash_table = vzalloc(sizeof(struct hlist_head) * sz);
 	sbi->blocknr_to_entry = vzalloc(sizeof(u64) * sz);
-	memset(sbi->blocknr_to_entry, -1, sizeof(*sbi->blocknr_to_entry));
+	for (i = 0; i < sz; i++)
+		sbi->blocknr_to_entry[i] = -1;
+	for (i = 0; i < NON_DEDUP_FP_LOCK_NUM; i++)
+		spin_lock_init(sbi->non_dedup_fp_locks + i);
 	sbi->dup_block = 0;
 	sbi->dedup_mode = NON_FIN;
 	nova_info("sbi->dup_block : %u sbi->dedup_mode: %u SAMPLE_BLOCK: %u NON_FIN: %u STR_FIN:%u", sbi->dup_block, NON_FIN, SAMPLE_BLOCK, NON_FIN_THRESH, STR_FIN_THRESH);
@@ -521,8 +524,12 @@ static struct nova_inode *nova_init(struct super_block *sb,
 		nova_warn("weak fp init failed");
 	}
 
-	if( nova_fp_weak_ctx_init(&sbi->nova_non_fin_calc_ctx) < 0 ) {
-		nova_warn("non_fin_calc fp init failed");
+	if( nova_fp_strong_ctx_init(&sbi->nova_non_fin_calc_str_ctx) < 0 ) {
+		nova_warn("non_fin_calc_str fp init failed");
+	}
+
+	if( nova_fp_weak_ctx_init(&sbi->nova_non_fin_calc_weak_ctx) < 0 ) {
+		nova_warn("non_fin_calc_weak fp init failed");
 	}
 
 	nova_sync_super(sb);
@@ -1015,7 +1022,7 @@ static void nova_put_super(struct super_block *sb)
 
 	nova_fp_hash_ctx_free(&sbi->nova_fp_strong_ctx);
 	nova_fp_hash_ctx_free(&sbi->nova_fp_weak_ctx);
-	nova_fp_hash_ctx_free(&sbi->nova_non_fin_calc_ctx);
+	nova_fp_hash_ctx_free(&sbi->nova_non_fin_calc_weak_ctx);
 	nova_free_entry_list(sb);
 	sz = 1 << sbi->num_entries_bits;
 	
