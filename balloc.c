@@ -565,8 +565,10 @@ int nova_free_data_blocks(struct super_block *sb,
 					}
 				}
 				pentry->blocknr = 0;
-				pentry->flag = FP_FREE_FLAG;
-				nova_free_entry(sb, to_be_free_idx);
+				/* NON_FIN_FLAG entry is freed by background */
+				if (pentry->flag != NON_FIN_FLAG) {
+					nova_free_entry(sb, to_be_free_idx);
+				}
 			}
 			spin_unlock(sbi->weak_hash_table_locks + weak_idx % HASH_TABLE_LOCK_NUM);
 			spin_unlock(sbi->strong_hash_table_locks + strong_idx % HASH_TABLE_LOCK_NUM);

@@ -130,6 +130,13 @@ static int nova_calc_non_fin(struct super_block *sb)
                 * 1. The block is already referenced by a weak hash table
                 * 2. The block is not referenced by a strong hash table
              */
+            /* The entry is removed by user */
+            if (pentry->refcount == 0) {
+                /* make sure not held by others */
+                nova_free_entry(sb, idx);
+                spin_unlock(sbi->non_dedup_fp_locks + idx % NON_DEDUP_FP_LOCK_NUM);
+                continue;
+            }
             if(pentry->blocknr != 0 && 
                pentry->blocknr < sbi->num_blocks && 
                sbi->blocknr_to_entry[pentry->blocknr] == idx) {

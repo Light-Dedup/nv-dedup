@@ -384,7 +384,6 @@ int nova_dedup_non_fin(struct super_block *sb, const char* data_buffer, unsigned
     int allocated = 0;
     
     alloc_entry = nova_alloc_entry(sb);
-    spin_lock(sbi->non_dedup_fp_locks + alloc_entry % NON_DEDUP_FP_LOCK_NUM);
     allocated = nova_alloc_block_write(sb, data_buffer,blocknr);
     if(allocated < 0)
         goto out;
@@ -395,7 +394,6 @@ int nova_dedup_non_fin(struct super_block *sb, const char* data_buffer, unsigned
     pentry->refcount = 1;
     nova_flush_buffer(pentry, sizeof(*pentry), true);
     sbi->blocknr_to_entry[*blocknr] = alloc_entry;
-    spin_unlock(sbi->non_dedup_fp_locks + alloc_entry % NON_DEDUP_FP_LOCK_NUM);
 
 out:
     return allocated;
