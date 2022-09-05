@@ -179,6 +179,7 @@ static int nova_calc_non_fin(struct super_block *sb)
             }
         }
         spin_unlock(sbi->non_dedup_fp_locks + idx % NON_DEDUP_FP_LOCK_NUM);
+        schedule();
     }
     return 0;
 }
