@@ -150,6 +150,27 @@ static int nova_calc_non_fin(struct super_block *sb)
                 if (weak_find_hentry) {
                     /* non dedup this block now, or we must free the block, if this block is 
                        referenced by file already, things get complex. */
+
+                    /* If weak_find_hentry, we shall not change the corresponding entry even the strong entry is 
+                       not found. Assume we find the strong entry is missing and inserts the entry into strong hlist. 
+                       After that, we observe the sequence below:  
+                        1. Block A is referenced by entry EA where EA is an entry with NON_FIN_FLAG
+                        2. Then we have a input block B whose content is equal to A. Since block A is non-deduped, 
+                        The block B is referenced by a new entry EB where EB is an entry with WEAK_FIN_FLAG
+                        3. Another input block C (whose content is also equal to A), NV-Dedup first searches in 
+                        weak hlist, and entry EB is located, then it finds that EB is WEAK_FIN_FLAG, and then 
+                        calculates its strong hash, and inserts the strong hash into string hlist. 
+                        
+                        Then conflicts happen. There are two same strong fingerprints in hlist, however, they point to 
+                        different in-NVM block.   
+                     */
+
+                    /* Further Assume
+                        rm (C) --> only Weak Entry of C in hlist is removed, and EC point to block 0
+                        rm (A) --> behave normally
+                        weak_str dedup (D) (D is equal to A) --> find Strong Entry of C in hlist, and return 0 to caller
+                        Error Happens.　
+                     */
                 } 
                 else {
                     pentry->flag = FP_WEAK_FLAG;
